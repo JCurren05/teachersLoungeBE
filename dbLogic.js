@@ -999,6 +999,18 @@ const getCategories = (req, res, next) => {
   });
 };
 
+const getTest = (req, res, next) => {
+  const sql = 'SELECT * FROM USERS';
+  connection.query(sql, function (error, results) {
+    if (error) {
+      console.error(error.stack);
+      return res.status(500).json({ message: "Server error, try again" });
+    }
+
+    return res.status(200).json({ data: results });
+  });
+};
+
 export {
   approvePost,
   deletePost,
@@ -1043,5 +1055,6 @@ export {
   friendUser,
   unfriendUser,
   getFriendsList,
-  getCategories
+  getCategories,
+  getTest
 };

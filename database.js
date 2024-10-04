@@ -1,20 +1,28 @@
-// server/index.js
 import express from "express";
 import cors from "cors";
-import mysql from "mysql";
+import pg from "pg";
 import * as dotenv from 'dotenv';
 dotenv.config();
+
 var app = express();
 app.use(cors());
 app.use(express.json());
 
-//This defines the database connection, functions in other files access this
-var connection = mysql.createConnection({
-  host      : process.env.AWS_HOST,
-  port      : process.env.AWS_PORT,
-  user      : process.env.AWS_USER,
-  password  : process.env.AWS_PASSWORD,
-  database  : process.env.AWS_DATABASE
+const { Client } = pg;
+
+const connection = new Client({
+  host: process.env.PGHOST,
+  port: process.env.PGPORT,
+  user: process.env.PGUSER,
+  password: process.env.PGPASSWORD,
+  database: process.env.PGDATABASE,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
- export default connection;
+connection.connect()
+  .then(() => console.log('Connected to PostgreSQL database'))
+  .catch(err => console.error('Connection error', err.stack));
+
+export default connection;

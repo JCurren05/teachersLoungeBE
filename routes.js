@@ -40,7 +40,8 @@ import {
   friendUser,
   unfriendUser,
   getFriendsList,
-  getCategories
+  getCategories,
+  getTest
 } from "./dbLogic.js";
 import { fileHelper, s3Delete, s3Upload } from "./fileManagement.js";
 import { login, register } from "./auth.js";
@@ -51,6 +52,7 @@ const router = express.Router();
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
+router.get("/test", getTest);
 router.post("/register", register);
 router.post("/login", login);
 router.get("/getApprovedUsers", userAuth, getApprovedUsers);
