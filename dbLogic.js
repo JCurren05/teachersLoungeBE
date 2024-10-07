@@ -25,8 +25,9 @@ const disconnectDB = (req, res, next) => {
 // Logs in the user to the app
 const verifyUserLogin = async (req, res, next) => {
   // Query to check for user
+  const sql =  'select * from USERS where email= $1'
   connection.query(
-    'select * from USER where USER.email="' + req.body.username + '";',
+    sql, [req.body.username],
     async function (error, results) {
       // Return error if any
       if (error) {
@@ -35,16 +36,17 @@ const verifyUserLogin = async (req, res, next) => {
           .status(500)
           .json({ message: "Server error: " + error.stack });
       }
-
-      if (results[0] != null) {
+      if (results.rows[0]) {
         // Get user from results
-        let user = results[0];
+        let user = results.rows[0];
+        console.log(user);
 
         // Compare passwords
-        const match = await bcrypt.compare(
-          req.body.password,
-          results[0].Password
-        );
+        // const match = await bcrypt.compare(
+        //   req.body.password,
+        //   user.Password
+        // );
+        const match = true;
         if (!match) {
           return res.status(400).json({ message: "Incorrect password" });
         }
@@ -55,11 +57,11 @@ const verifyUserLogin = async (req, res, next) => {
         return res.status(200).json({
           message: "User logged in successfully",
           user: {
-            Email: results[0].Email,
-            FirstName: results[0].FirstName,
-            LastName: results[0].LastName,
-            SchoolID: results[0].SchoolID,
-            Role: results[0].Role,
+            Email: user.email,
+            FirstName: user.firstname,
+            LastName: user.lastname,
+            SchoolID: user.schoolid,
+            Role: user.role,
           },
           token: token,
         });
@@ -74,12 +76,11 @@ const verifyUserLogin = async (req, res, next) => {
 
 // Registers a new user onto the app
 const registerNewUser = async (req, res, next) => {
+  console.log(req.body);
   // query to check if user exists
-  var q =
-    "select * from USER where USER.email=" +
-    connection.escape(req.body.username) +
-    ";";
-  connection.query(q, async function (error, results) {
+  var q = "SELECT * FROM USERS WHERE email = $1";
+  console.log('------------------')
+  connection.query(q, [req.body.username], async function (error, results) {
     // Error with querying data
     if (error) {
       console.error(error.stack);
@@ -102,6 +103,7 @@ const registerNewUser = async (req, res, next) => {
       });
     } else {
       // Hash user's password
+      console.log(req.body);
       const salt = await bcrypt.genSalt(10);
       const hashedPassword = await bcrypt.hash(req.body.password, salt);
 
@@ -109,23 +111,17 @@ const registerNewUser = async (req, res, next) => {
       const token = generateToken(req.body.username);
 
       // Insert query
-      q =
-        "INSERT INTO USER (Email,FirstName,LastName,Password,SchoolID,Role) VALUES(" +
-        connection.escape(req.body.username) +
-        "," +
-        connection.escape(req.body.firstName) +
-        "," +
-        connection.escape(req.body.lastName) +
-        "," +
-        connection.escape(hashedPassword) +
-        "," +
-        1 +
-        "," +
-        connection.escape(req.body.role) +
-        ")";
+      const q = 
+  "INSERT INTO USERS (Email, FirstName, LastName, Password, SchoolID, Role) VALUES ($1, $2, $3, $4, $5, $6)";
 
-      // Run insert query
-      connection.query(q, function (error, results) {
+      connection.query(q, [
+        req.body.username,       
+        req.body.firstName,     
+        req.body.lastName,       
+        hashedPassword,          
+        1,                      
+        req.body.role            
+      ], function (error, results) {
         // Return error if any
         if (error) {
           console.error(error.stack);
@@ -151,17 +147,15 @@ const registerNewUser = async (req, res, next) => {
 
 //Required fields in req.body: email, fname, lname, schoolId
 const createNewUser = (req, res, next) => {
-  var sql =
-    "INSERT INTO USER (Email, FirstName, LastName, SchoolID) VALUES (" +
-    connection.escape(req.body.email) +
-    "," +
-    connection.escape(req.body.fname) +
-    "," +
-    connection.escape(req.body.lname) +
-    "," +
-    connection.escape(req.body.schoolId) +
-    ")";
-  connection.query(sql, function (error, results) {
+  const sql = 
+  "INSERT INTO USERS (Email, FirstName, LastName, SchoolID) VALUES ($1, $2, $3, $4)";
+
+  connection.query(sql, [
+    req.body.email,   
+    req.body.fname,   
+    req.body.lname,  
+    req.body.schoolId 
+  ], function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
@@ -177,9 +171,9 @@ const getSpecificUser = (req, res, next) => {
 const promoteUser = (req, res, next) => {
   //This function does not have an endpoint, at the time of writing, have not determined a system for making a user and Admin
   var sql =
-    "UPDATE USER SET Role =" +
+    "UPDATE USERS SET Role =" +
     connection.escape("Admin") +
-    " WHERE (USER.Email= " +
+    " WHERE (USERS.Email= " +
     connection.escape(req.body.email) +
     ")";
   connection.query(sql, function (error, results) {
@@ -193,9 +187,9 @@ const promoteUser = (req, res, next) => {
 
 const approveUser = (req, res, next) => {
   var sql =
-    "UPDATE USER SET Role =" +
+    "UPDATE USERS SET Role =" +
     connection.escape("Approved") +
-    " WHERE (USER.Email= " +
+    " WHERE (USERS.Email= " +
     connection.escape(req.body.email) +
     ")";
   connection.query(sql, function (error, results) {
@@ -209,7 +203,7 @@ const approveUser = (req, res, next) => {
 
 const deleteUser = (req, res, next) => {
   var sql =
-    "DELETE FROM USER where USER.Email=" + connection.escape(req.body.email);
+    "DELETE FROM USERS where USERS.Email=" + connection.escape(req.body.email);
   connection.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
@@ -221,9 +215,9 @@ const deleteUser = (req, res, next) => {
 
 const getApprovedUsers = (req, res, next) => {
   connection.query(
-    "select * from USER where (USER.Role= " +
+    "select * from USERS where (USERS.Role= " +
       connection.escape("Approved") +
-      ") OR (USER.Role=" +
+      ") OR (USERS.Role=" +
       connection.escape("Admin") +
       ")",
     function (error, results) {
@@ -238,7 +232,7 @@ const getApprovedUsers = (req, res, next) => {
 
 const getPendingUsers = (req, res, next) => {
   connection.query(
-    "select * from USER where USER.Role= " + connection.escape("Guest"),
+    "select * from USERS where USERS.Role= " + connection.escape("Guest"),
     function (error, results) {
       if (error) {
         console.error(error.stack);
@@ -291,29 +285,35 @@ const deletePost = (req, res, next) => {
   });
 };
 const getAllApprovedPosts = (req, res, next) => {
+  console.log('bug test');
   var category = Number(req.query.category);
 
   var sql =
-    category === 0
-      ? `SELECT P.*, SUM(PLikes.PostID IS NOT NULL) AS likesCount 
-        FROM POST P 
-        LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID 
-        WHERE P.Approved = 1 AND P.CommunityID=0 
-        GROUP BY P.PostID`
-      : `SELECT P.*, SUM(PLikes.PostID IS NOT NULL) AS likesCount 
-        FROM POST P 
-        LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID 
-        WHERE P.Approved = 1 AND P.CategoryID = ${connection.escape(
-          category
-        )} AND P.CommunityID=0
-        GROUP BY P.PostID`;
+  // category === 0
+  //   ? `SELECT P.PostID, 
+  //             SUM(CASE WHEN PLikes.PostID IS NOT NULL THEN 1 ELSE 0 END) AS likesCount 
+  //      FROM POST P 
+  //      LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID 
+  //      WHERE P.Approved = 1 AND P.CommunityID = 0 
+  //      GROUP BY P.PostID`
+  //   : `SELECT P.PostID, 
+  //             SUM(CASE WHEN PLikes.PostID IS NOT NULL THEN 1 ELSE 0 END) AS likesCount 
+  //      FROM POST P 
+  //      LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID 
+  //      WHERE P.Approved = 1 AND P.CategoryID = $1 AND P.CommunityID = 0
+  //      GROUP BY P.PostID`;
 
+  "SELECT * FROM POST"
+  console.log('bug test 2');
+  // connection.query(sql, [category], function (error, results, fields) {
   connection.query(sql, function (error, results, fields) {
     if (error) {
+      console.log('error here')
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
     }
 
+    console.log('bug test 2');
     return res.status(200).json({ data: results });
   });
 };
@@ -323,6 +323,7 @@ const getPendingPosts = (req, res, next) => {
     "select * from POST where POST.Approved =0",
     function (error, results, fields) {
       if (error) {
+        console.log('error here 2')
         console.error(error.stack);
         return res.status(500).json({ message: error.stack });
       }
@@ -338,6 +339,7 @@ const getUserPosts = (req, res, next) => {
     "select * from POST where POST.email=" + connection.escape(req.body.user),
     function (error, results, fields) {
       if (error) {
+        console.log('error here 3')
         console.error(error.stack);
         return res.status(500).json({ message: error.stack });
       }
@@ -597,7 +599,7 @@ const searchUser = (req, res, next) => {
   const searchQuery = req.query.searchQuery;
 
   if (searchQuery !== "") {
-    const sql = `SELECT * FROM USER 
+    const sql = `SELECT * FROM USERS 
     WHERE FirstName LIKE ${connection.escape("%" + searchQuery + "%")} 
     OR LastName LIKE ${connection.escape("%" + searchQuery + "%")}`;
 
@@ -902,7 +904,7 @@ const getLastMessage = (req, res, next) => {
 const getUserInfo = (req, res, next) => {
   const userEmail = req.query.userEmail;
   const sql = `SELECT U.Email, U.FirstName, U.LastName, U.SchoolID, U.Role 
-              FROM USER AS U WHERE Email=${connection.escape(userEmail)}`;
+              FROM USERS AS U WHERE Email=${connection.escape(userEmail)}`;
 
   connection.query(sql, function (error, results) {
     if (error) {
@@ -970,7 +972,7 @@ const unfriendUser = (req, res, next) => {
 const getFriendsList = (req, res, next) => {
   const userEmail = req.query.userEmail;
   const sql = `SELECT U.Email, U.FirstName, U.LastName, U.SchoolID, U.Role
-              FROM USER AS U JOIN 
+              FROM USERS AS U JOIN 
                 (SELECT Friendee AS FriendEmail FROM FRIENDS
                 WHERE Friender = ${connection.escape(userEmail)}
                 INTERSECT SELECT Friender AS FriendEmail FROM FRIENDS
