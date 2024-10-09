@@ -8,9 +8,9 @@ var app = express();
 app.use(cors());
 app.use(express.json());
 
-const { Client } = pg;
+const { Pool } = pg;
 
-const connection = new Client({
+const pool  = new Pool({
   host: process.env.PGHOST,
   port: process.env.PGPORT,
   user: process.env.PGUSER,
@@ -21,8 +21,5 @@ const connection = new Client({
   }
 });
 
-connection.connect()
-  .then(() => console.log('Connected to PostgreSQL database'))
-  .catch(err => console.error('Connection error', err.stack));
 
-export default connection;
+export default pool;
