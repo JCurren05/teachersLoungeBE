@@ -65,93 +65,86 @@ const verifyUserLogin = async (req, res, next) => {
 // Registers a new user onto the app
 const registerNewUser = async (req, res, next) => {
   console.log(req.body);
-  // query to check if user exists
-  var q = "SELECT * FROM USERS WHERE email = $1";
-  console.log('------------------')
-  connection.query(q, [req.body.username], async function (error, results) {
-    // Error with querying data
-    if (error) {
-      console.error(error.stack);
-      return res
-        .status(500)
-        .json({ message: "Error with query: " + error.stack });
-    }
+
+  try {
+    // Query to check if the user already exists
+    const checkUserQuery = "SELECT * FROM USERS WHERE email = $1";
+    const checkUserResult = await pool.query(checkUserQuery, [req.body.username]);
 
     // User already exists
-    if (results[0] != null) {
+    if (checkUserResult.rows.length > 0) {
+      const user = checkUserResult.rows[0];
       return res.status(400).json({
         message: "This username is already taken",
         data: {
-          Email: results[0].Email,
-          FirstName: results[0].FirstName,
-          LastName: results[0].LastName,
-          SchoolID: results[0].SchoolID,
-          Role: results[0].Role,
+          Email: user.email,
+          FirstName: user.firstname,
+          LastName: user.lastname,
+          SchoolID: user.schoolid,
+          Role: user.role,
         },
       });
-    } else {
-      // Hash user's password
-      console.log(req.body);
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(req.body.password, salt);
-
-      // Generate jwt for the user
-      const token = generateToken(req.body.username);
-
-      // Insert query
-      const q = 
-  "INSERT INTO USERS (Email, FirstName, LastName, Password, SchoolID, Role) VALUES ($1, $2, $3, $4, $5, $6)";
-
-      connection.query(q, [
-        req.body.username,       
-        req.body.firstName,     
-        req.body.lastName,       
-        hashedPassword,          
-        1,                      
-        req.body.role            
-      ], function (error, results) {
-        // Return error if any
-        if (error) {
-          console.error(error.stack);
-          return res
-            .status(500)
-            .json({ message: "Error with query: " + error.stack });
-        } else {
-          return res.status(200).json({
-            Email: req.body.username,
-            FirstName: req.body.firstName,
-            LastName: req.body.lastName,
-            SchoolID: 1,
-            Role: req.body.role,
-            token: token,
-          });
-        }
-      });
     }
-  });
+
+    // Hash user's password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(req.body.password, salt);
+
+    // Generate JWT for the user
+    const token = generateToken(req.body.username);
+
+    // Insert new user into the database
+    const insertUserQuery = 
+      "INSERT INTO USERS (Email, FirstName, LastName, Password, SchoolID, Role) VALUES ($1, $2, $3, $4, $5, $6)";
+    await pool.query(insertUserQuery, [
+      req.body.username,
+      req.body.firstName,
+      req.body.lastName,
+      hashedPassword,
+      1, // Assuming 1 is a placeholder for SchoolID
+      req.body.role
+    ]);
+
+    // Respond with success message and user data
+    return res.status(200).json({
+      Email: req.body.username,
+      FirstName: req.body.firstName,
+      LastName: req.body.lastName,
+      SchoolID: 1,
+      Role: req.body.role,
+      token: token,
+    });
+
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error: " + error.stack });
+  }
 };
 
 //Functions dealing with users
 
 //Required fields in req.body: email, fname, lname, schoolId
-const createNewUser = (req, res, next) => {
+const createNewUser = async (req, res, next) => {
   const sql = 
-  "INSERT INTO USERS (Email, FirstName, LastName, SchoolID) VALUES ($1, $2, $3, $4)";
+    "INSERT INTO USERS (Email, FirstName, LastName, SchoolID) VALUES ($1, $2, $3, $4)";
 
-  connection.query(sql, [
-    req.body.email,   
-    req.body.fname,   
-    req.body.lname,  
-    req.body.schoolId 
-  ], function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: error.stack });
-    }
+  try {
+    // Execute the query with pool.query
+    const results = await pool.query(sql, [
+      req.body.email,    
+      req.body.fname,    
+      req.body.lname,    
+      req.body.schoolId  
+    ]);
+
+    // Send a success response with the query results
     return res.status(200).json({ data: results });
-  });
-};
 
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: error.stack });
+  }
+};
 const getSpecificUser = (req, res, next) => {
   //TODO- this will be the same as getApprovedUsers but add a WHERE for the email
 };
