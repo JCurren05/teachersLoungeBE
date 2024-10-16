@@ -572,23 +572,29 @@ const createNewCommunityPost = (req, res, next) => {
 };
 
 // Searches for a user
-const searchUser = (req, res, next) => {
-  // Create a regular expression to search for the query
+const searchUser = async (req, res, next) => {
   const searchQuery = req.query.searchQuery;
-console.log('searchUser hit')
+  console.log('searchUser hit');
+
   if (searchQuery !== "") {
     const sql = `SELECT * FROM USERS 
-    WHERE FirstName LIKE ${connection.escape("%" + searchQuery + "%")} 
-    OR LastName LIKE ${connection.escape("%" + searchQuery + "%")}`;
+                 WHERE FirstName LIKE $1 
+                 OR LastName LIKE $1`;
 
-    connection.query(sql, function (error, results, fields) {
-      if (error) {
-        console.error(error.stack);
-        return res.status(500).json({ message: error.stack });
-      }
+    try {
+      const client = await pool.connect();
 
-      return res.status(200).json({ data: results });
-    });
+      const result = await client.query(sql, [`%${searchQuery}%`]);
+
+      client.release();
+
+      return res.status(200).json({ data: result.rows });
+    } catch (error) {
+      console.error("Error executing search query:", error.stack);
+      return res.status(500).json({ message: "Server error, try again" });
+    }
+  } else {
+    return res.status(400).json({ message: "Search query cannot be empty" });
   }
 };
 
@@ -950,25 +956,31 @@ const unfriendUser = (req, res, next) => {
   });
 };
 
-const getFriendsList = (req, res, next) => {
+const getFriendsList = async (req, res, next) => {
   console.log('getFriends hit');
   const userEmail = req.query.userEmail;
+
   const sql = `SELECT U.Email, U.FirstName, U.LastName, U.SchoolID, U.Role
-              FROM USERS AS U JOIN 
-                (SELECT Friendee AS FriendEmail FROM FRIENDS
-                WHERE Friender = ${connection.escape(userEmail)}
-                INTERSECT SELECT Friender AS FriendEmail FROM FRIENDS
-                WHERE Friendee = ${connection.escape(userEmail)}
-                ) AS FriendsTable ON FriendsTable.FriendEmail = U.Email;`;
+               FROM USERS AS U JOIN 
+                  (SELECT Friendee AS FriendEmail FROM FRIENDS
+                   WHERE Friender = $1
+                   INTERSECT 
+                   SELECT Friender AS FriendEmail FROM FRIENDS
+                   WHERE Friendee = $1) AS FriendsTable
+               ON FriendsTable.FriendEmail = U.Email;`;
 
-  connection.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
+  try {
+      const client = await pool.connect();
+
+      const result = await client.query(sql, [userEmail]);
+
+      client.release();
+
+      return res.status(200).json({ data: result.rows });
+  } catch (error) {
+      console.error("Error retrieving friends list:", error.stack);
       return res.status(500).json({ message: "Server error, try again" });
-    }
-
-    return res.status(200).json({ data: results });
-  });
+  }
 };
 
 const getCategories = async (req, res, next) => {
