@@ -795,15 +795,15 @@ const getConversations = async (req, res, next) => {
   const userEmail = req.query.userEmail;
 
   const sql = `
-    SELECT c.ConversationID, GROUP_CONCAT(cm.Email) AS members
-    FROM CONVERSATION AS c
-    LEFT JOIN CONVERSATION_MEMBERS AS cm ON c.ConversationID = cm.ConversationID
-    WHERE c.ConversationID IN (
-      SELECT ConversationID
-      FROM CONVERSATION_MEMBERS
-      WHERE Email = $1
+    SELECT c.conversationid, string_agg(cm.email, ',') AS members
+    FROM conversation AS c
+    LEFT JOIN conversation_members AS cm ON c.conversationid = cm.conversationid
+    WHERE c.conversationid IN (
+      SELECT conversationid
+      FROM conversation_members
+      WHERE email = $1
     )
-    GROUP BY c.ConversationID;
+    GROUP BY c.conversationid;
   `;
 
   const client = await pool.connect();
@@ -811,12 +811,16 @@ const getConversations = async (req, res, next) => {
   try {
     const results = await client.query(sql, [userEmail]);
 
+    if (!results.rows.length) {
+      return res.status(404).json({ message: "No conversations found" });
+    }
+
     let conversations = results.rows.map(row => {
       let members = row.members.split(",");
       let title = members.find(email => email !== userEmail)?.split("@")[0];
 
       return {
-        conversationId: row.ConversationID,
+        conversationId: row.conversationid,
         members,
         title
       };
@@ -824,12 +828,13 @@ const getConversations = async (req, res, next) => {
 
     return res.status(200).json({ data: conversations });
   } catch (error) {
-    console.error(error.stack);
-    return res.status(500).json({ message: "Server error, try again" });
+    console.error('Error fetching conversations:', error.stack);
+    return res.status(500).json({ message: "Server error, please try again later" });
   } finally {
     client.release();
   }
 };
+
 // Sends a message
 const sendMessage = (req, res, next) => {
   const message = req.body.message;
