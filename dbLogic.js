@@ -894,8 +894,8 @@ const getUserInfo = async (req, res, next) => {
   console.log('getUserInfo hit');
   const userEmail = req.query.userEmail;
 
-  const sql = `SELECT U.Email, U.FirstName, U.LastName, U.SchoolID, U.Role 
-               FROM USERS AS U WHERE U.Email = $1`;
+  const sql = `SELECT U.email, U.firstname, U.lastname, U.schoolid, U.role 
+               FROM USERS AS U WHERE U.email = $1`;
 
   try {
     const client = await pool.connect();
@@ -934,21 +934,25 @@ const checkIfFriended = async (req, res, next) => {
 };
 
 // Friends a user, requires both to friend each other to be friends
-const friendUser = (req, res, next) => {
+const friendUser = async (req, res, next) => {
+  console.log('friend user hit');
   const frienderEmail = req.body.frienderEmail;
   const friendeeEmail = req.body.friendeeEmail;
 
-  const sql = `INSERT INTO FRIENDS (Friendee, Friender) VALUES 
-              (${connection.escape(friendeeEmail)}, 
-              ${connection.escape(frienderEmail)});`;
+  const sql = `INSERT INTO FRIENDS (Friendee, Friender) VALUES ($1, $2)`;
 
-  connection.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
+  try {
+    const client = await pool.connect();
+
+    await client.query(sql, [friendeeEmail, frienderEmail]);
+
+    client.release();
+
     return res.status(201).json({ message: "User friended successfully" });
-  });
+  } catch (error) {
+    console.error("Error executing friendUser query:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
 
 const unfriendUser = (req, res, next) => {
