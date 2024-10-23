@@ -522,7 +522,7 @@ const getUserCommunities = (req, res, next) => {
   console.log('getUserCommunities hit');
   const email = req.query.email;
   const sql =
-    "SELECT c.CommunityID, c.CommunityName FROM COMMUNITY c JOIN COMMUNITY_MEMBERS cm ON c.CommunityID = cm.CommunityID WHERE cm.Email = ?";
+    "SELECT c.CommunityID, c.CommunityName FROM COMMUNITY c JOIN COMMUNITY_MEMBERS cm ON c.CommunityID = cm.CommunityID WHERE cm.Email = $1";
 
   pool.query(sql, [email], function (error, results) {
     if (error) {
