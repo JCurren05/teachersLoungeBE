@@ -157,7 +157,7 @@ const promoteUser = (req, res, next) => {
     " WHERE (USERS.Email= " +
     connection.escape(req.body.email) +
     ")";
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
@@ -173,7 +173,7 @@ const approveUser = (req, res, next) => {
     " WHERE (USERS.Email= " +
     connection.escape(req.body.email) +
     ")";
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
@@ -185,7 +185,7 @@ const approveUser = (req, res, next) => {
 const deleteUser = (req, res, next) => {
   var sql =
     "DELETE FROM USERS where USERS.Email=" + connection.escape(req.body.email);
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
@@ -196,7 +196,7 @@ const deleteUser = (req, res, next) => {
 
 const getApprovedUsers = (req, res, next) => {
   console.log('getApprovedUsers hit');
-  connection.query(
+  pool.query(
     "select * from USERS where (USERS.Role= " +
       connection.escape("Approved") +
       ") OR (USERS.Role=" +
@@ -214,7 +214,7 @@ const getApprovedUsers = (req, res, next) => {
 
 const getPendingUsers = (req, res, next) => {
   console.log('getPendingUsers hit');
-  connection.query(
+  pool.query(
     "select * from USERS where USERS.Role= " + connection.escape("Guest"),
     function (error, results) {
       if (error) {
@@ -235,7 +235,7 @@ const approvePost = (req, res, next) => {
     " WHERE (POST.PostID= " +
     connection.escape(req.body.id) +
     ")";
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
@@ -250,7 +250,7 @@ const deletePost = (req, res, next) => {
     "DELETE FROM POST_LIKES where POST_LIKES.PostID = " +
     connection.escape(req.body.id);
 
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
@@ -259,7 +259,7 @@ const deletePost = (req, res, next) => {
 
   // Delete record from post table
   sql = "DELETE FROM POST where POST.PostID=" + connection.escape(req.body.id);
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
@@ -270,7 +270,7 @@ const deletePost = (req, res, next) => {
 
 const getPendingPosts = (req, res, next) => {
   console.log('getPendingPosts hit');
-  connection.query(
+  pool.query(
     "select * from POST where POST.Approved =0",
     function (error, results, fields) {
       if (error) {
@@ -288,7 +288,7 @@ const getPendingPosts = (req, res, next) => {
 const getUserPosts = (req, res, next) => {
   console.log('getUserPosts hit');
   const sql =  "select * from POST where email=$1";
-  connection.query(
+  pool.query(
     sql,[req.body.user],
     function (error, results) {
       if (error) {
@@ -324,7 +324,7 @@ const getAllApprovedPosts = async (req, res, next) => {
 //Database functionality with likes and comments has not been implemented yet but these functions are how we imagine that would happen...
 const getPostComments = (req, res, next) => {
   console.log('getPostComments hit');
-  connection.query(
+  pool.query(
     "select * from COMMENTS_TO_POST where COMMENTS_TO_POST.postId=" +
       connection.escape(req.body.postId),
     function (error, results, fields) {
@@ -347,7 +347,7 @@ const likePost = (req, res, next) => {
     ")";
 
   // Execute query
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     // Return error if any
     if (error) {
       return res.status(500).json({ message: "Server error, try again" });
@@ -360,7 +360,7 @@ const likePost = (req, res, next) => {
 // Gets the number of likes for a post
 const getPostLikes = (req, res, next) => {
   console.log('getPostLikeshit');
-  connection.query(
+  pool.query(
     "select COUNT(*) as likeCount from POST_LIKES where POST_LIKES.POSTID=" +
       connection.escape(req.body.postID),
     function (error, results, fields) {
@@ -391,7 +391,7 @@ const createNewPost = (req, res, next) => {
     "," +
     connection.escape(req.body.awsFileLoc) +
     ")";
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: "Server error, try again" });
@@ -408,7 +408,7 @@ const createNewCommunity = (req, res, next) => {
     "';";
 
   // Check if community exists
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     // Return error if any
     if (error) {
       return res.status(500).json({ message: "Server error, try again" });
@@ -422,7 +422,7 @@ const createNewCommunity = (req, res, next) => {
         ")";
 
       // Run insert query
-      connection.query(sql, function (error, results) {
+      pool.query(sql, function (error, results) {
         // Return error if any
         if (error) {
           return res.status(500).json({ message: "Server error, try again" });
@@ -444,7 +444,7 @@ const getAllCommunities = (req, res, next) => {
   const sql = "SELECT * FROM COMMUNITY";
 
   // Run insert query
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     // Return error if any
     if (error) {
       return res.status(500).json({ message: "Server error, try again" });
@@ -464,7 +464,7 @@ const joinCommunity = (req, res, next) => {
     ");";
 
   // Run insert query
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     // Return error if any
     if (error) {
       return res.status(500).json({ message: "Server error, try again" });
@@ -486,7 +486,7 @@ const leaveCommunity = (req, res, next) => {
     ";";
 
   // Run delete query
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     // Return error if any
     if (error) {
       return res.status(500).json({ message: "Server error, try again" });
@@ -505,7 +505,7 @@ const getUserCommunities = (req, res, next) => {
   const sql =
     "SELECT c.CommunityID, c.CommunityName FROM COMMUNITY c JOIN COMMUNITY_MEMBERS cm ON c.CommunityID = cm.CommunityID WHERE cm.Email = ?";
 
-  connection.query(sql, [email], function (error, results) {
+  pool.query(sql, [email], function (error, results) {
     if (error) {
       return res.status(500).json({ message: "Server error, try again" });
     }
@@ -533,7 +533,7 @@ const getCommunityApprovedPosts = (req, res, next) => {
       )} AND P.CommunityID= ${connection.escape(community)} 
       GROUP BY P.PostID`;
 
-  connection.query(sql, function (error, results, fields) {
+  pool.query(sql, function (error, results, fields) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
@@ -562,7 +562,7 @@ const createNewCommunityPost = (req, res, next) => {
     "," +
     connection.escape(req.body.communityId) +
     ")";
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: "Server error, try again" });
@@ -610,7 +610,7 @@ const addComment = (req, res, next) => {
     "," +
     connection.escape(req.body.time) +
     ")";
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
@@ -626,7 +626,7 @@ const getComment = (req, res, next) => {
     connection.escape(req.body.email) +
     " AND Content=" +
     connection.escape(req.body.content);
-  connection.query(sql, function (error, results, fields) {
+  pool.query(sql, function (error, results, fields) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
@@ -640,7 +640,7 @@ const getCommentByCommentID = (req, res, next) => {
   var sql =
     "SELECT * FROM COMMENT WHERE CommentId =" +
     connection.escape(req.body.commentId);
-  connection.query(sql, function (error, results, fields) {
+  pool.query(sql, function (error, results, fields) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
@@ -658,7 +658,7 @@ const addCommentToPost = (req, res, next) => {
     "," +
     connection.escape(req.body.postId) +
     ")";
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: error.stack });
@@ -692,7 +692,7 @@ const updateComment = (req, res, next) => {
     connection.escape(req.body.content) +
     " WHERE CommentID=" +
     connection.escape(req.body.commentId);
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: "Server error, try again" });
@@ -705,7 +705,7 @@ const deleteComment = (req, res, next) => {
   var sql =
     "DELETE FROM COMMENT WHERE CommentID=" +
     connection.escape(req.body.commentId);
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: "Server error, try again" });
@@ -728,7 +728,7 @@ const createConversation = (req, res, next) => {
             WHERE cm1.Email = ${connection.escape(senderEmail)}
             AND cm2.Email = ${connection.escape(receiverEmail)}; `;
 
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       return res
         .status(500)
@@ -742,7 +742,7 @@ const createConversation = (req, res, next) => {
       sql = `INSERT INTO CONVERSATION(Title) 
   VALUES ('Default Conversation');`;
 
-      connection.query(sql, function (error, results) {
+      pool.query(sql, function (error, results) {
         if (error) {
           console.error(error.stack);
           return res
@@ -758,7 +758,7 @@ const createConversation = (req, res, next) => {
 VALUES (${connection.escape(conversationId)}, ${connection.escape(
           senderEmail
         )});`;
-        connection.query(sql, function (error, results) {
+        pool.query(sql, function (error, results) {
           if (error) {
             console.error(error.stack);
             return res
@@ -772,7 +772,7 @@ VALUES (${connection.escape(conversationId)}, ${connection.escape(
 VALUES (${connection.escape(conversationId)}, ${connection.escape(
           receiverEmail
         )});`;
-        connection.query(sql, function (error, results) {
+        pool.query(sql, function (error, results) {
           if (error) {
             console.error(error.stack);
             return res
@@ -841,7 +841,7 @@ const sendMessage = (req, res, next) => {
     conversationId
   )}, ${connection.escape(senderEmail)});`;
 
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: "Server error, try again" });
@@ -860,7 +860,7 @@ const getMessages = (req, res, next) => {
     conversationId
   )};`;
 
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: "Server error, try again" });
@@ -880,7 +880,7 @@ const getLastMessage = (req, res, next) => {
               LIMIT 1;
               `;
 
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: "Server error, try again" });
@@ -963,7 +963,7 @@ const unfriendUser = (req, res, next) => {
               ${connection.escape(friendeeEmail)} AND Friender = 
               ${connection.escape(frienderEmail)};`;
 
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: "Server error, try again" });
@@ -1018,7 +1018,7 @@ const getCategories = async (req, res, next) => {
 
 const getTest = (req, res, next) => {
   const sql = 'SELECT * FROM USERS';
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     if (error) {
       console.error(error.stack);
       return res.status(500).json({ message: "Server error, try again" });
