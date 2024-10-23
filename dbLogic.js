@@ -633,20 +633,21 @@ const addCommentToPost = (req, res, next) => {
 
 const getCommentsByPostID = async (req, res, next) => {
   console.log('getCommentsByPostID hit');
-  
-  const postId = Number(req.query.postId); // Convert to number
 
-  // Validate that postId is a number and not NaN
+  // Parse postId from the request query and ensure it's a valid number
+  const postId = Number(req.query.postId);
+
+  // Check if postId is valid
   if (isNaN(postId)) {
-    return res.status(400).json({ message: "Invalid postId" });
+    return res.status(400).json({ message: 'Invalid postId' });
   }
 
   const sql = 'SELECT * FROM COMMENTS_TO_POST WHERE PostID = $1';
 
-  try {
-    const client = await pool.connect();
-    const results = await client.query(sql, [postId]);
+  const client = await pool.connect();
 
+  try {
+    const results = await client.query(sql, [postId]);
     return res.status(200).json({ data: results.rows });
   } catch (error) {
     console.error(error.stack);
