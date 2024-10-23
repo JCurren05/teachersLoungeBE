@@ -228,176 +228,140 @@ const getPendingUsers = (req, res, next) => {
 
 //Functions dealing with posts
 
-const approvePost = (req, res, next) => {
-  var sql =
-    "UPDATE POST SET Approved =" +
-    connection.escape(1) +
-    " WHERE (POST.PostID= " +
-    connection.escape(req.body.id) +
-    ")";
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: error.stack });
-    }
-    return res.status(200).json({ message: "Success" });
-  });
-};
-
-const deletePost = (req, res, next) => {
-  // Delete all records from post_likes table
-  let sql =
-    "DELETE FROM POST_LIKES where POST_LIKES.PostID = " +
-    connection.escape(req.body.id);
-
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: error.stack });
-    }
-  });
-
-  // Delete record from post table
-  sql = "DELETE FROM POST where POST.PostID=" + connection.escape(req.body.id);
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: error.stack });
-    }
-    next();
-  });
-};
-
-const getPendingPosts = (req, res, next) => {
-  console.log('getPendingPosts hit');
-  pool.query(
-    "select * from POST where POST.Approved =0",
-    function (error, results, fields) {
-      if (error) {
-        console.log('error here 2')
-        console.error(error);
-        return res.status(500).json({ message: error.stack });
-      }
-
-      return res.status(200).json({ data: results });
-    }
-  );
-};
-
-//Gets post based on a user
-const getUserPosts = (req, res, next) => {
-  console.log('getUserPosts hit');
-  const sql =  "select * from POST where email=$1";
-  pool.query(
-    sql,[req.body.user],
-    function (error, results) {
-      if (error) {
-        console.log('error here 3')
-        console.error(error);
-        return res.status(500).json({ message: error.stack });
-      }
-      return res.status(200).json({ data: results });
-    }
-  );
-};
-
-const getAllApprovedPosts = async (req, res, next) => {
-  const client = await pool.connect();
+// Approve a post
+const approvePost = async (req, res, next) => {
+  const sql = "UPDATE POST SET Approved = $1 WHERE PostID = $2";
+  const values = [1, req.body.id];
 
   try {
-    console.log('getAllApprovedPost hit');
-    const sql = 'SELECT * FROM post';
-    const results = await client.query('SELECT * FROM post');
-    
-    console.log('This runs');
-    return res.status(200).json({ data: results });
+    await pool.query(sql, values);
+    return res.status(200).json({ message: "Success" });
   } catch (error) {
-    console.log(error);
-    console.log('Error fetching approved posts');
+    console.error(error.stack);
+    return res.status(500).json({ message: error.stack });
+  }
+};
+
+// Delete a post
+const deletePost = async (req, res, next) => {
+  try {
+    const deleteLikesSql = "DELETE FROM POST_LIKES WHERE PostID = $1";
+    await pool.query(deleteLikesSql, [req.body.id]);
+
+    const deletePostSql = "DELETE FROM POST WHERE PostID = $1";
+    await pool.query(deletePostSql, [req.body.id]);
+
+    return res.status(200).json({ message: "Post deleted successfully" });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: error.stack });
+  }
+};
+
+// Get pending posts
+const getPendingPosts = async (req, res, next) => {
+  const sql = "SELECT * FROM POST WHERE Approved = $1";
+  const values = [0]; // 0 means 'pending'
+
+  try {
+    const results = await pool.query(sql, values);
+    return res.status(200).json({ data: results.rows });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: error.stack });
+  }
+};
+
+// Get posts by user
+const getUserPosts = async (req, res, next) => {
+  const sql = "SELECT * FROM POST WHERE Email = $1";
+  const values = [req.body.user];
+
+  try {
+    const results = await pool.query(sql, values);
+    return res.status(200).json({ data: results.rows });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: error.stack });
+  }
+};
+
+// Get all approved posts
+const getAllApprovedPosts = async (req, res, next) => {
+  try {
+    const sql = "SELECT * FROM POST WHERE Approved = $1";
+    const results = await pool.query(sql, [1]); // 1 means 'approved'
+
+    return res.status(200).json({ data: results.rows });
+  } catch (error) {
+    console.error(error.stack);
     return res.status(500).json({ message: "Server error, try again" });
-  } finally {
-    client.release();
   }
 };
 
 
 //Database functionality with likes and comments has not been implemented yet but these functions are how we imagine that would happen...
-const getPostComments = (req, res, next) => {
-  console.log('getPostComments hit');
-  pool.query(
-    "select * from COMMENTS_TO_POST where COMMENTS_TO_POST.postId=" +
-      connection.escape(req.body.postId),
-    function (error, results, fields) {
-      if (error) {
-        console.error(error.stack);
-        return res.status(500).json({ message: error.stack });
-      }
-      return res.status(200).json({ data: results });
-    }
-  );
-};
+// Create a new post
+const createNewPost = async (req, res, next) => {
+  const sql = `INSERT INTO post (content, email, categoryid, fileurl, filedisplayname, filetype, ...) VALUES ($1, $2, $3, $4, $5, $6, ...)`;
+  const values = [
+    req.body.content,
+    req.body.email,
+    req.body.category,
+    req.body.fileUrl,
+    req.body.fileDisplayName,
+    req.body.fileType,
+  ];
 
-// Adds a like to a post
-const likePost = (req, res, next) => {
-  const sql =
-    "INSERT INTO POST_LIKES (PostID, Email) VALUES (" +
-    connection.escape(req.body.postId) +
-    "," +
-    connection.escape(req.body.userEmail) +
-    ")";
-
-  // Execute query
-  pool.query(sql, function (error, results) {
-    // Return error if any
-    if (error) {
-      return res.status(500).json({ message: "Server error, try again" });
-    }
-
-    return res.status(200).json({ message: "Successfully liked the post!" });
-  });
-};
-
-// Gets the number of likes for a post
-const getPostLikes = (req, res, next) => {
-  console.log('getPostLikeshit');
-  pool.query(
-    "select COUNT(*) as likeCount from POST_LIKES where POST_LIKES.POSTID=" +
-      connection.escape(req.body.postID),
-    function (error, results, fields) {
-      if (error) {
-        console.error(error.stack);
-        return res.status(500).json({ message: "Server error, try again" });
-      }
-
-      return res.status(200).json({ likeCount: results[0].likeCount });
-    }
-  );
-};
-
-const createNewPost = (req, res, next) => {
-  var sql =
-    "INSERT INTO POST(Content,Email, CategoryID,FileUrl,FileDisplayName,FileType,awsFileLoc) VALUES (" +
-    connection.escape(req.body.content) +
-    "," +
-    connection.escape(req.body.email) +
-    "," +
-    connection.escape(req.body.category) +
-    "," +
-    connection.escape(req.body.fileUrl) +
-    "," +
-    connection.escape(req.body.fileDisplayName) +
-    "," +
-    connection.escape(req.body.fileType) +
-    "," +
-    connection.escape(req.body.awsFileLoc) +
-    ")";
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
+  try {
+    const results = await pool.query(sql, values);
     return res.status(200).json({ data: results });
-  });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: error.stack });
+  }
+};
+
+// Add a like to a post
+const likePost = async (req, res, next) => {
+  const sql = "INSERT INTO POST_LIKES (PostID, Email) VALUES ($1, $2)";
+  const values = [req.body.postId, req.body.userEmail];
+
+  try {
+    await pool.query(sql, values);
+    return res.status(200).json({ message: "Successfully liked the post!" });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
+};
+
+// Get the number of likes for a post
+const getPostLikes = async (req, res, next) => {
+  const sql = "SELECT COUNT(*) as likeCount FROM POST_LIKES WHERE POSTID = $1";
+  const values = [req.body.postID];
+
+  try {
+    const results = await pool.query(sql, values);
+    return res.status(200).json({ likeCount: results.rows[0].likecount });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
+};
+
+// Get comments for a post
+const getPostComments = async (req, res, next) => {
+  const sql = "SELECT * FROM COMMENTS_TO_POST WHERE PostID = $1";
+  const values = [req.body.postId];
+
+  try {
+    const results = await pool.query(sql, values);
+    return res.status(200).json({ data: results.rows });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: error.stack });
+  }
 };
 
 // Creates a community with the provided name
@@ -669,14 +633,20 @@ const addCommentToPost = (req, res, next) => {
 
 const getCommentsByPostID = async (req, res, next) => {
   console.log('getCommentsByPostID hit');
-  const postId = Number(req.query.postId);
+  
+  const postId = Number(req.query.postId); // Convert to number
+
+  // Validate that postId is a number and not NaN
+  if (isNaN(postId)) {
+    return res.status(400).json({ message: "Invalid postId" });
+  }
 
   const sql = 'SELECT * FROM COMMENTS_TO_POST WHERE PostID = $1';
 
-  const client = await pool.connect();
-
   try {
+    const client = await pool.connect();
     const results = await client.query(sql, [postId]);
+
     return res.status(200).json({ data: results.rows });
   } catch (error) {
     console.error(error.stack);
