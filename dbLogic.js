@@ -475,25 +475,24 @@ const getAllCommunities = (req, res, next) => {
 };
 
 // Joins a specified user to the specified community
-const joinCommunity = (req, res, next) => {
-  let sql =
-    "INSERT INTO COMMUNITY_MEMBERS VALUES (" +
-    connection.escape(req.body.communityID) +
-    "," +
-    connection.escape(req.body.userEmail) +
-    ");";
+const joinCommunity = async (req, res, next) => {
+  const client = await pool.connect();
 
-  // Run insert query
-  connection.query(sql, function (error, results) {
-    // Return error if any
-    if (error) {
-      return res.status(500).json({ message: "Server error, try again" });
-    }
+  try {
+    const sql = `
+      INSERT INTO COMMUNITY_MEMBERS (communityID, email)
+      VALUES ($1, $2);
+    `;
+    const values = [req.body.communityID, req.body.userEmail];
+    await client.query(sql, values);
 
-    return res
-      .status(201)
-      .json({ message: "User joined community successfully" });
-  });
+    return res.status(201).json({ message: "User joined community successfully" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Server error, try again" });
+  } finally {
+    client.release();
+  }
 };
 
 // Leaves a specified user from the specified community
@@ -530,7 +529,7 @@ const getUserCommunities = (req, res, next) => {
       return res.status(500).json({ message: "Server error, try again" });
     }
 
-    return res.status(200).json({ data: results });
+    return res.status(200).json({ data: results.rows });
   });
 };
 
