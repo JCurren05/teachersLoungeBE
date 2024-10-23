@@ -399,8 +399,7 @@ const createNewPost = (req, res, next) => {
     return res.status(200).json({ data: results });
   });
 };
-
-// Creates a community with the provided name
+/*
 const createNewCommunity = (req, res, next) => {
   let sql =
     "SELECT * FROM COMMUNITY WHERE CommunityName = '" +
@@ -436,6 +435,27 @@ const createNewCommunity = (req, res, next) => {
       return res.status(500).json({ message: "Community already exists!" });
     }
   });
+}; */
+const createNewCommunity = (req, res, next) => {
+    const sql = "SELECT * FROM COMMUNITY WHERE CommunityName = $1";
+    const values = [req.body.communityName];
+
+    pool.query(sql, values, (error, results) => {
+        if (error) {
+            return res.status(500).json({ message: "Server error, try again" });
+        }
+        if (results.rows.length === 0) {
+            const insertSql = "INSERT INTO COMMUNITY(CommunityName) VALUES ($1)";
+            pool.query(insertSql, values, (error, results) => {
+                if (error) {
+                    return res.status(500).json({ message: "Server error, try again" });
+                }
+                return res.status(201).json({ message: "Community created successfully" });
+            });
+        } else {
+            return res.status(500).json({ message: "Community already exists!" });
+        }
+    });
 };
 
 // Gets all communities
@@ -444,13 +464,13 @@ const getAllCommunities = (req, res, next) => {
   const sql = "SELECT * FROM COMMUNITY";
 
   // Run insert query
-  connection.query(sql, function (error, results) {
+  pool.query(sql, function (error, results) {
     // Return error if any
     if (error) {
       return res.status(500).json({ message: "Server error, try again" });
     }
 
-    return res.status(200).json({ data: results });
+    return res.status(200).json({ data: results.rows });
   });
 };
 
@@ -505,7 +525,7 @@ const getUserCommunities = (req, res, next) => {
   const sql =
     "SELECT c.CommunityID, c.CommunityName FROM COMMUNITY c JOIN COMMUNITY_MEMBERS cm ON c.CommunityID = cm.CommunityID WHERE cm.Email = ?";
 
-  connection.query(sql, [email], function (error, results) {
+  pool.query(sql, [email], function (error, results) {
     if (error) {
       return res.status(500).json({ message: "Server error, try again" });
     }
