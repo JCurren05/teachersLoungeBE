@@ -807,25 +807,27 @@ const getConversations = async (req, res, next) => {
 };
 
 // Sends a message
-const sendMessage = (req, res, next) => {
-  const message = req.body.message;
-  const conversationId = Number(req.body.conversationId);
-  const senderEmail = req.body.senderEmail;
+const sendMessage = async (req, res, next) => {
+  const { message, conversationId, senderEmail } = req.body; // Changed conversation_Id to conversationId
 
-  const sql = `INSERT INTO MESSAGE(Content, ConversationID, Sender)
-              VALUES (${connection.escape(message)}, ${connection.escape(
-    conversationId
-  )}, ${connection.escape(senderEmail)});`;
+  // SQL query using parameterized placeholders
+  const sql = `INSERT INTO MESSAGE(Content, Conversation_ID, Sender)
+               VALUES ($1, $2, $3)`;
 
-  connection.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
+  try {
+    // Using pool.query to run the SQL command with the parameters
+    const result = await pool.query(sql, [message, conversationId, senderEmail]);
 
+    // If the query was successful, send a success response
     return res.status(200).json({ message: "Message sent successfully" });
-  });
+  } catch (error) {
+    // Log any error that occurs and send a 500 error response
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
+
+
 
 // Gets messages for a conversation
 // Gets messages for a conversation
