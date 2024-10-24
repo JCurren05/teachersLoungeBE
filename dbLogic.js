@@ -828,28 +828,29 @@ const sendMessage = (req, res, next) => {
 };
 
 // Gets messages for a conversation
-const getMessages = (req, res, next) => {
+// Gets messages for a conversation
+const getMessages = async (req, res, next) => {
   console.log('getMessages hit');
-  const conversationId = Number(req.query.conversationId);
+  const conversationId = Number(req.query.conversationId); // Ensure this is a number
 
-  const sql = `SELECT * FROM MESSAGE WHERE ConversationID = ${connection.escape(
-    conversationId
-  )};`;
+  // Use the correct column name
+  const sql = `SELECT * FROM MESSAGE WHERE conversation_id = $1;`;
 
-  connection.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
-
-    return res.status(200).json({ data: results });
-  });
+  try {
+    // Pass parameters as an array
+    const result = await pool.query(sql, [conversationId]);
+    return res.status(200).json({ data: result.rows });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
+
 
 // Gets the last message in a conversation
 const getLastMessage = async (req, res, next) => {
   const conversationId = Number(req.query.conversationId);
-  
+
   // Use a parameterized query
   const sql = `SELECT * FROM MESSAGE
               WHERE Conversation_ID = $1
