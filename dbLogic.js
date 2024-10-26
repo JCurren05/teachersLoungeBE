@@ -497,23 +497,27 @@ const joinCommunity = async (req, res, next) => {
 
 // Leaves a specified user from the specified community
 const leaveCommunity = (req, res, next) => {
-  let sql =
-    "DELETE FROM COMMUNITY_MEMBERS WHERE CommunityID = " +
-    connection.escape(req.query.communityID) +
-    " AND Email =" +
-    connection.escape(req.query.userEmail) +
-    ";";
+  const { communityID, userEmail } = req.query;
+  console.log(`Attempting to leave community: ${communityID}, User: ${userEmail}`);
+  
+  const sql = `
+      DELETE FROM COMMUNITY_MEMBERS
+      WHERE CommunityID = $1
+      AND Email = $2`;
 
-  // Run delete query
-  connection.query(sql, function (error, results) {
-    // Return error if any
-    if (error) {
-      return res.status(500).json({ message: "Server error, try again" });
-    }
-
-    return res
-      .status(200)
-      .json({ message: "User removed from community successfully" });
+  pool.query(sql, [communityID, userEmail], (error, results) => {
+      if (error) {
+          console.error('Error executing query:', error.stack);
+          return res.status(500).json({ message: "Server error, try again" });
+      }
+      
+      if (results.rowCount > 0) {
+          console.log('User removed successfully');
+          return res.status(200).json({ message: "User removed from community successfully" });
+      } else {
+          console.log('No rows affected');
+          return res.status(404).json({ message: "User not found in community" });
+      }
   });
 };
 
@@ -537,30 +541,27 @@ const getCommunityApprovedPosts = (req, res, next) => {
   console.log('getCommApprovedPosts hit');
   var community = Number(req.query.communityID);
   var category = Number(req.query.category);
-  var sql =
-    category === 0
-      ? `SELECT P.*, SUM(PLikes.PostID IS NOT NULL) AS likesCount 
-      FROM POST P 
-      LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID 
-      WHERE P.Approved = 1 AND P.CommunityID= ${connection.escape(community)} 
-      GROUP BY P.PostID`
-      : `SELECT P.*, SUM(PLikes.PostID IS NOT NULL) AS likesCount 
-      FROM POST P 
-      LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID 
-      WHERE P.Approved = 1 AND P.CategoryID = ${connection.escape(
-        category
-      )} AND P.CommunityID= ${connection.escape(community)} 
-      GROUP BY P.PostID`;
-
-  connection.query(sql, function (error, results, fields) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: error.stack });
-    }
-
-    return res.status(200).json({ data: results });
+  var sql = category === 0
+  ? `SELECT P.*, SUM(CASE WHEN PLikes.PostID IS NOT NULL THEN 1 ELSE 0 END) AS likesCount
+     FROM POST P
+     LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID
+     WHERE P.Approved = 1 AND P.CommunityID = ${community}
+     GROUP BY P.PostID, P.Approved, P.CategoryID, P.CommunityID, P.FirstName, P.Content, P.Email, P.FileURL, P.FileDisplayName, P.FileType`
+  : `SELECT P.*, SUM(CASE WHEN PLikes.PostID IS NOT NULL THEN 1 ELSE 0 END) AS likesCount
+     FROM POST P
+     LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID
+     WHERE P.Approved = 1 AND P.CategoryID = ${category} AND P.CommunityID = ${community}
+     GROUP BY P.PostID, P.Approved, P.CategoryID, P.CommunityID, P.FirstName, P.Content, P.Email, P.FileURL, P.FileDisplayName, P.FileType`;
+  
+  pool.query(sql, (error, results) => {
+      if (error) {
+          console.error(error.stack); 
+          return res.status(500).json({ message: error.stack });
+      }
+      return res.status(200).json({ data: results });
   });
 };
+
 
 const createNewCommunityPost = (req, res, next) => {
   var sql =
