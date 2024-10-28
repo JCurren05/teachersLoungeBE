@@ -594,6 +594,7 @@ const createNewCommunityPost = (req, res, next) => {
 // Searches for a user
 const searchUser = async (req, res, next) => {
   const searchQuery = req.query.searchQuery;
+  console.log(searchQuery);
   console.log('searchUser hit');
 
   if (searchQuery !== "") {
@@ -605,6 +606,8 @@ const searchUser = async (req, res, next) => {
       const client = await pool.connect();
 
       const result = await client.query(sql, [`%${searchQuery}%`]);
+
+      console.log(result.rows);
 
       client.release();
 
@@ -732,79 +735,50 @@ const deleteComment = (req, res, next) => {
 };
 
 // Creates a new conversation
-const createConversation = (req, res, next) => {
+const createConversation = async (req, res, next) => {
   // Get sender and receiver email
   const senderEmail = req.body.senderEmail;
   const receiverEmail = req.body.receiverEmail;
-  let conversationId = null;
 
-  // Check if conversation already exists
-  let sql = `SELECT *
-            FROM CONVERSATION_MEMBERS cm1
-            JOIN CONVERSATION_MEMBERS cm2 ON cm1.ConversationID = cm2.ConversationID
-            WHERE cm1.Email = ${connection.escape(senderEmail)}
-            AND cm2.Email = ${connection.escape(receiverEmail)}; `;
+  try {
+    // Check if conversation already exists
+    const checkConversationSql = `SELECT *
+                                  FROM CONVERSATION_MEMBERS cm1
+                                  JOIN CONVERSATION_MEMBERS cm2 ON cm1.ConversationID = cm2.ConversationID
+                                  WHERE cm1.Email = $1 AND cm2.Email = $2;`;
 
-  connection.query(sql, function (error, results) {
-    if (error) {
-      return res
-        .status(500)
-        .json({ message: "Server error, Couldn't create conversation" });
+    const existingConversation = await pool.query(checkConversationSql, [senderEmail, receiverEmail]);
+
+    if (existingConversation.rows.length > 0) {
+      return res.status(400).json({ message: "Conversation already exists" });
     }
 
-    if (results.length > 0) {
-      return res.status(500).json({ message: "Conversation already exists" });
-    } else {
-      // Create conversation
-      sql = `INSERT INTO CONVERSATION(Title) 
-  VALUES ('Default Conversation');`;
+    // Create new conversation
+    const createConversationSql = `INSERT INTO CONVERSATION(Title) 
+                                   VALUES ('Default Conversation') RETURNING ConversationID;`;
 
-      connection.query(sql, function (error, results) {
-        if (error) {
-          console.error(error.stack);
-          return res
-            .status(500)
-            .json({ message: "Server error, Couldn't create conversation" });
-        }
+    const newConversation = await pool.query(createConversationSql);
+    const conversationId = newConversation.rows[0].conversationid;
 
-        // Set conversation ID
-        conversationId = results.insertId;
+    // Insert 1st member of conversation
+    const addSenderSql = `INSERT INTO CONVERSATION_MEMBERS(ConversationID, Email) 
+                          VALUES ($1, $2);`;
+    await pool.query(addSenderSql, [conversationId, senderEmail]);
 
-        // Insert 1st member of conversation
-        sql = `INSERT INTO CONVERSATION_MEMBERS(ConversationID, Email) 
-VALUES (${connection.escape(conversationId)}, ${connection.escape(
-          senderEmail
-        )});`;
-        connection.query(sql, function (error, results) {
-          if (error) {
-            console.error(error.stack);
-            return res
-              .status(500)
-              .json({ message: "Server error, Couldn't add sender" });
-          }
-        });
+    // Insert 2nd member of conversation
+    const addReceiverSql = `INSERT INTO CONVERSATION_MEMBERS(ConversationID, Email) 
+                            VALUES ($1, $2);`;
+    await pool.query(addReceiverSql, [conversationId, receiverEmail]);
 
-        // Insert 2nd member of conversation
-        sql = `INSERT INTO CONVERSATION_MEMBERS(ConversationID, Email) 
-VALUES (${connection.escape(conversationId)}, ${connection.escape(
-          receiverEmail
-        )});`;
-        connection.query(sql, function (error, results) {
-          if (error) {
-            console.error(error.stack);
-            return res
-              .status(500)
-              .json({ message: "Server error, Couldn't add receiver" });
-          }
+    // Success response
+    return res.status(200).json({ message: "Conversation created successfully" });
 
-          return res
-            .status(200)
-            .json({ message: "Conversation created successfully" });
-        });
-      });
-    }
-  });
+  } catch (error) {
+    console.error('Error creating conversation:', error);
+    return res.status(500).json({ message: "Server error, couldn't create conversation" });
+  }
 };
+
 
 // Gets conversations for a user
 const getConversations = async (req, res, next) => {
@@ -812,15 +786,15 @@ const getConversations = async (req, res, next) => {
   const userEmail = req.query.userEmail;
 
   const sql = `
-    SELECT c.ConversationID, GROUP_CONCAT(cm.Email) AS members
-    FROM CONVERSATION AS c
-    LEFT JOIN CONVERSATION_MEMBERS AS cm ON c.ConversationID = cm.ConversationID
-    WHERE c.ConversationID IN (
-      SELECT ConversationID
-      FROM CONVERSATION_MEMBERS
-      WHERE Email = $1
+    SELECT c.conversationid, string_agg(cm.email, ',') AS members
+    FROM conversation AS c
+    LEFT JOIN conversation_members AS cm ON c.conversationid = cm.conversationid
+    WHERE c.conversationid IN (
+      SELECT conversationid
+      FROM conversation_members
+      WHERE email = $1
     )
-    GROUP BY c.ConversationID;
+    GROUP BY c.conversationid;
   `;
 
   const client = await pool.connect();
@@ -828,12 +802,16 @@ const getConversations = async (req, res, next) => {
   try {
     const results = await client.query(sql, [userEmail]);
 
+    if (!results.rows.length) {
+      return res.status(404).json({ message: "No conversations found" });
+    }
+
     let conversations = results.rows.map(row => {
       let members = row.members.split(",");
       let title = members.find(email => email !== userEmail)?.split("@")[0];
 
       return {
-        conversationId: row.ConversationID,
+        conversationId: row.conversationid,
         members,
         title
       };
@@ -841,122 +819,139 @@ const getConversations = async (req, res, next) => {
 
     return res.status(200).json({ data: conversations });
   } catch (error) {
-    console.error(error.stack);
-    return res.status(500).json({ message: "Server error, try again" });
+    console.error('Error fetching conversations:', error.stack);
+    return res.status(500).json({ message: "Server error, please try again later" });
   } finally {
     client.release();
   }
 };
+
 // Sends a message
-const sendMessage = (req, res, next) => {
-  const message = req.body.message;
-  const conversationId = Number(req.body.conversationId);
-  const senderEmail = req.body.senderEmail;
+const sendMessage = async (req, res, next) => {
+  const { message, conversationId, senderEmail } = req.body; // Changed conversation_Id to conversationId
 
-  const sql = `INSERT INTO MESSAGE(Content, ConversationID, Sender)
-              VALUES (${connection.escape(message)}, ${connection.escape(
-    conversationId
-  )}, ${connection.escape(senderEmail)});`;
+  // SQL query using parameterized placeholders
+  const sql = `INSERT INTO MESSAGE(Content, Conversation_ID, Sender)
+               VALUES ($1, $2, $3)`;
 
-  connection.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
+  try {
+    // Using pool.query to run the SQL command with the parameters
+    const result = await pool.query(sql, [message, conversationId, senderEmail]);
 
+    // If the query was successful, send a success response
     return res.status(200).json({ message: "Message sent successfully" });
-  });
+  } catch (error) {
+    // Log any error that occurs and send a 500 error response
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
+
+
 
 // Gets messages for a conversation
-const getMessages = (req, res, next) => {
+// Gets messages for a conversation
+const getMessages = async (req, res, next) => {
   console.log('getMessages hit');
-  const conversationId = Number(req.query.conversationId);
+  const conversationId = Number(req.query.conversationId); // Ensure this is a number
 
-  const sql = `SELECT * FROM MESSAGE WHERE ConversationID = ${connection.escape(
-    conversationId
-  )};`;
+  // Use the correct column name
+  const sql = `SELECT * FROM MESSAGE WHERE conversation_id = $1;`;
 
-  connection.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
-
-    return res.status(200).json({ data: results });
-  });
+  try {
+    // Pass parameters as an array
+    const result = await pool.query(sql, [conversationId]);
+    return res.status(200).json({ data: result.rows });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
+
 
 // Gets the last message in a conversation
-const getLastMessage = (req, res, next) => {
+const getLastMessage = async (req, res, next) => {
   const conversationId = Number(req.query.conversationId);
 
+  // Use a parameterized query
   const sql = `SELECT * FROM MESSAGE
-              WHERE ConversationID = ${connection.escape(conversationId)}
-              ORDER BY MessageID DESC
-              LIMIT 1;
-              `;
+              WHERE Conversation_ID = $1
+              ORDER BY Message_ID DESC
+              LIMIT 1;`;
 
-  connection.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
-
-    return res.status(200).json({ data: results });
-  });
+  try {
+    // Pass parameters as an array
+    const result = await pool.query(sql, [conversationId]);
+    return res.status(200).json({ data: result.rows });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
 
-const getUserInfo = (req, res, next) => {
+const getUserInfo = async (req, res, next) => {
   console.log('getUserInfo hit');
   const userEmail = req.query.userEmail;
-  const sql = `SELECT U.Email, U.FirstName, U.LastName, U.SchoolID, U.Role 
-              FROM USERS AS U WHERE Email=${connection.escape(userEmail)}`;
 
-  connection.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
+  const sql = `SELECT U.email, U.firstname, U.lastname, U.schoolid, U.role 
+               FROM USERS AS U WHERE U.email = $1`;
 
-    return res.status(200).json({ data: results });
-  });
+  try {
+    const client = await pool.connect();
+
+    const result = await client.query(sql, [userEmail]);
+
+    client.release();
+
+    return res.status(200).json({ data: result.rows });
+  } catch (error) {
+    console.error("Error executing user info query:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
 
 // Check if one user friended another, requires both ways to be friends
-const checkIfFriended = (req, res, next) => {
+const checkIfFriended = async (req, res, next) => {
+  console.log('check if friended hit');
   const frienderEmail = req.query.frienderEmail;
   const friendeeEmail = req.query.friendeeEmail;
-  const sql = `SELECT * FROM FRIENDS WHERE Friendee=
-              ${connection.escape(friendeeEmail)} AND 
-              Friender=${connection.escape(frienderEmail)}`;
 
-  connection.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
+  const sql = `SELECT * FROM FRIENDS WHERE Friendee = $1 AND Friender = $2`;
 
-    return res.status(200).json({ data: results });
-  });
+  try {
+    const client = await pool.connect();
+
+    const result = await client.query(sql, [friendeeEmail, frienderEmail]);
+
+    client.release();
+
+    return res.status(200).json({ data: result.rows });
+  } catch (error) {
+    console.error("Error executing checkIfFriended query:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
 
 // Friends a user, requires both to friend each other to be friends
-const friendUser = (req, res, next) => {
+const friendUser = async (req, res, next) => {
+  console.log('friend user hit');
   const frienderEmail = req.body.frienderEmail;
   const friendeeEmail = req.body.friendeeEmail;
 
-  const sql = `INSERT INTO FRIENDS (Friendee, Friender) VALUES 
-              (${connection.escape(friendeeEmail)}, 
-              ${connection.escape(frienderEmail)});`;
+  const sql = `INSERT INTO FRIENDS (Friendee, Friender) VALUES ($1, $2)`;
 
-  connection.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
+  try {
+    const client = await pool.connect();
+
+    await client.query(sql, [friendeeEmail, frienderEmail]);
+
+    client.release();
+
     return res.status(201).json({ message: "User friended successfully" });
-  });
+  } catch (error) {
+    console.error("Error executing friendUser query:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
 
 const unfriendUser = (req, res, next) => {
