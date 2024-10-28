@@ -145,9 +145,9 @@ const createNewUser = async (req, res, next) => {
     return res.status(500).json({ message: error.stack });
   }
 };
-const getSpecificUser = (req, res, next) => {
-  //TODO- this will be the same as getApprovedUsers but add a WHERE for the email
-};
+// const getSpecificUser = (req, res, next) => {
+//   //TODO- this will be the same as getApprovedUsers but add a WHERE for the email
+// };
 
 const promoteUser = (req, res, next) => {
   //This function does not have an endpoint, at the time of writing, have not determined a system for making a user and Admin
@@ -245,11 +245,17 @@ const approvePost = async (req, res, next) => {
 // Delete a post
 const deletePost = async (req, res, next) => {
   try {
-    const deleteLikesSql = "DELETE FROM POST_LIKES WHERE PostID = $1";
-    await pool.query(deleteLikesSql, [req.body.id]);
+    // Delete likes associated with the post
+    const deleteLikesSql = "DELETE FROM POST_LIKES WHERE postid = $1";
+    await pool.query(deleteLikesSql, [req.body.postid]);
 
-    const deletePostSql = "DELETE FROM POST WHERE PostID = $1";
-    await pool.query(deletePostSql, [req.body.id]);
+    // Delete comments associated with the post
+    const deleteCommentsSql = "DELETE FROM COMMENTS_TO_POST WHERE postid = $1";
+    await pool.query(deleteCommentsSql, [req.body.postid]);
+
+    // Delete the post itself
+    const deletePostSql = "DELETE FROM POST WHERE postid = $1";
+    await pool.query(deletePostSql, [req.body.postid]);
 
     return res.status(200).json({ message: "Post deleted successfully" });
   } catch (error) {
@@ -260,8 +266,8 @@ const deletePost = async (req, res, next) => {
 
 // Get pending posts
 const getPendingPosts = async (req, res, next) => {
-  const sql = "SELECT * FROM POST WHERE Approved = $1";
-  const values = [0]; // 0 means 'pending'
+  const sql = "SELECT * FROM POST WHERE approved = $1";
+  const values = [0]; // 0 for pending posts
 
   try {
     const results = await pool.query(sql, values);
@@ -274,8 +280,8 @@ const getPendingPosts = async (req, res, next) => {
 
 // Get posts by user
 const getUserPosts = async (req, res, next) => {
-  const sql = "SELECT * FROM POST WHERE Email = $1";
-  const values = [req.body.user];
+  const sql = "SELECT * FROM POST WHERE email = $1";
+  const values = [req.body.email];
 
   try {
     const results = await pool.query(sql, values);
@@ -289,8 +295,8 @@ const getUserPosts = async (req, res, next) => {
 // Get all approved posts
 const getAllApprovedPosts = async (req, res, next) => {
   try {
-    const sql = "SELECT * FROM POST WHERE Approved = $1";
-    const results = await pool.query(sql, [1]); // 1 means 'approved'
+    const sql = "SELECT * FROM POST WHERE approved = $1";
+    const results = await pool.query(sql, [1]); // 1 for approved posts
 
     return res.status(200).json({ data: results.rows });
   } catch (error) {
@@ -303,19 +309,23 @@ const getAllApprovedPosts = async (req, res, next) => {
 //Database functionality with likes and comments has not been implemented yet but these functions are how we imagine that would happen...
 // Create a new post
 const createNewPost = async (req, res, next) => {
-  const sql = `INSERT INTO post (content, email, categoryid, fileurl, filedisplayname, filetype, ...) VALUES ($1, $2, $3, $4, $5, $6, ...)`;
+  const sql = `
+    INSERT INTO POST (content, email, categoryid, fileurl, filedisplayname, filetype)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    RETURNING *`;
   const values = [
     req.body.content,
     req.body.email,
-    req.body.category,
-    req.body.fileUrl,
-    req.body.fileDisplayName,
-    req.body.fileType,
+    req.body.categoryid,
+    req.body.fileurl,
+    req.body.filedisplayname,
+    req.body.filetype,
+    req.body.approved || 1 //to approve posts by default
   ];
 
   try {
-    const results = await pool.query(sql, values);
-    return res.status(200).json({ data: results });
+    const result = await pool.query(sql, values);
+    return res.status(200).json({ data: result.rows[0] });
   } catch (error) {
     console.error(error.stack);
     return res.status(500).json({ message: error.stack });
@@ -501,58 +511,56 @@ const getUserCommunities = (req, res, next) => {
   });
 };
 
-const getCommunityApprovedPosts = (req, res, next) => {
-  console.log('getCommApprovedPosts hit');
-  var community = Number(req.query.communityID);
-  var category = Number(req.query.category);
-  var sql = category === 0
-  ? `SELECT P.*, SUM(CASE WHEN PLikes.PostID IS NOT NULL THEN 1 ELSE 0 END) AS likesCount
-     FROM POST P
-     LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID
-     WHERE P.Approved = 1 AND P.CommunityID = ${community}
-     GROUP BY P.PostID, P.Approved, P.CategoryID, P.CommunityID, P.FirstName, P.Content, P.Email, P.FileURL, P.FileDisplayName, P.FileType`
-  : `SELECT P.*, SUM(CASE WHEN PLikes.PostID IS NOT NULL THEN 1 ELSE 0 END) AS likesCount
-     FROM POST P
-     LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID
-     WHERE P.Approved = 1 AND P.CategoryID = ${category} AND P.CommunityID = ${community}
-     GROUP BY P.PostID, P.Approved, P.CategoryID, P.CommunityID, P.FirstName, P.Content, P.Email, P.FileURL, P.FileDisplayName, P.FileType`;
-  
-  pool.query(sql, (error, results) => {
-      if (error) {
-          console.error(error.stack); 
-          return res.status(500).json({ message: error.stack });
-      }
-      return res.status(200).json({ data: results });
-  });
+const getCommunityApprovedPosts = async (req, res, next) => {
+  const communityID = Number(req.query.communityID);
+  const categoryID = Number(req.query.categoryid);
+
+  const sql = categoryID === 0
+    ? `SELECT P.*, COALESCE(COUNT(PL.postid), 0) AS likesCount
+       FROM POST P
+       LEFT JOIN POST_LIKES PL ON P.postid = PL.postid
+       WHERE P.communityid = $1
+       GROUP BY P.postid`
+    : `SELECT P.*, COALESCE(COUNT(PL.postid), 0) AS likesCount
+       FROM POST P
+       LEFT JOIN POST_LIKES PL ON P.postid = PL.postid
+       WHERE P.communityid = $1 AND P.categoryid = $2
+       GROUP BY P.postid`;
+
+  try {
+    const values = categoryID === 0 ? [communityID] : [communityID, categoryID];
+    const results = await pool.query(sql, values);
+
+    return res.status(200).json({ data: results.rows });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: error.stack });
+  }
 };
 
 
-const createNewCommunityPost = (req, res, next) => {
-  var sql =
-    "INSERT INTO POST(Content,Email, CategoryID,FileUrl,FileDisplayName,FileType,awsFileLoc, CommunityID) VALUES (" +
-    connection.escape(req.body.content) +
-    "," +
-    connection.escape(req.body.email) +
-    "," +
-    connection.escape(req.body.category) +
-    "," +
-    connection.escape(req.body.fileUrl) +
-    "," +
-    connection.escape(req.body.fileDisplayName) +
-    "," +
-    connection.escape(req.body.fileType) +
-    "," +
-    connection.escape(req.body.awsFileLoc) +
-    "," +
-    connection.escape(req.body.communityId) +
-    ")";
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
-    return res.status(200).json({ data: results });
-  });
+const createNewCommunityPost = async (req, res, next) => {
+  const sql = `
+    INSERT INTO POST (content, email, categoryid, fileurl, filedisplayname, filetype, communityid)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING *`;
+  const values = [
+    req.body.content,
+    req.body.email,
+    req.body.categoryid,
+    req.body.fileurl,
+    req.body.filedisplayname,
+    req.body.filetype,
+    req.body.communityid,
+  ];
+
+  try {
+    const result = await pool.query(sql, values);
+    return res.status(200).json({ data: result.rows[0] });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: error.stack });
+  }
 };
 
 // Searches for a user

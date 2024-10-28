@@ -1,27 +1,25 @@
 import express from "express";
 import {
-  approvePost,
-  deletePost,
-  getApprovedUsers,
-  getPendingUsers,
-  getUserPosts,
-  getPostComments,
-  getPostLikes,
-  createNewUser,
   createNewPost,
   getAllApprovedPosts,
   getPendingPosts,
+  getUserPosts,
+  deletePost,
+  createNewCommunityPost,
+  getCommunityApprovedPosts,
+  verifyUserLogin,
+  registerNewUser,
+  getApprovedUsers,
+  getPendingUsers,
   approveUser,
   deleteUser,
-  connectDB,
-  createNewCommunity,
+  createNewUser,
+  //getSpecificUser,
+  //promoteUser,
   getAllCommunities,
   joinCommunity,
   leaveCommunity,
-  likePost,
   getUserCommunities,
-  getCommunityApprovedPosts,
-  createNewCommunityPost,
   searchUser,
   addComment,
   getComment,
@@ -43,69 +41,70 @@ import {
   getCategories,
   getTest
 } from "./dbLogic.js";
-import { fileHelper, s3Delete, s3Upload } from "./fileManagement.js";
-import { login, register } from "./auth.js";
-import { userAuth } from "./middleware/authMiddleware.js";
-import bodyParser from "body-parser";
-const app = express();
-const router = express.Router();
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
 
-router.get("/test", getTest);
-router.post("/register", register);
-router.post("/login", login);
-router.get("/getApprovedUsers", userAuth, getApprovedUsers);
-router.get("/getPendingUsers",userAuth, getPendingUsers);
-router.get("/getUserPosts",userAuth, getUserPosts);
-router.get("/getPostComments",userAuth, getPostComments);
-router.get("/getPostLikes",userAuth, getPostLikes);
-router.post("/likePost", userAuth, likePost);
-router.post("/createNewUser",userAuth, createNewUser);
-router.post("/createNewPost",userAuth, createNewPost);
-router.get("/getAllApprovedPosts",userAuth, getAllApprovedPosts);
-router.get("/getPendingPosts",userAuth, getPendingPosts);
-router.post("/approvePost",userAuth, approvePost);
-router.post("/deletePost",userAuth, deletePost, s3Delete);
-router.post("/deleteUser",userAuth, deleteUser);
-router.post("/approveUser",userAuth, approveUser);
-router.post("/createNewPost",userAuth, createNewPost);
-router.post("/createNewCommunity",userAuth, createNewCommunity);
-router.get("/getAllCommunities",userAuth, getAllCommunities);
-router.post("/joinCommunity",userAuth, joinCommunity);
-router.delete("/leaveCommunity",userAuth, leaveCommunity)
-router.get("/getUserCommunities", userAuth, getUserCommunities);
-router.get("/getCommunityApprovedPosts", getCommunityApprovedPosts);
+const router = express.Router();
+
+// Authentication Routes
+router.post("/login", verifyUserLogin);
+router.post("/register", registerNewUser);
+
+// User Management Routes
+router.post("/createNewUser", createNewUser);
+router.get("/getApprovedUsers", getApprovedUsers);
+router.get("/getPendingUsers", getPendingUsers);
+router.post("/approveUser", approveUser);
+router.delete("/deleteUser", deleteUser);
+//router.get("/getSpecificUser", getSpecificUser); // Assuming this function will be implemented similarly to getApprovedUsers
+//router.post("/promoteUser", promoteUser);
+
+// Post Routes
+router.post("/createNewPost", createNewPost);
+router.get("/getAllApprovedPosts", getAllApprovedPosts);
+router.get("/getPendingPosts", getPendingPosts);
+router.get("/getUserPosts", getUserPosts);
+router.delete("/deletePost", deletePost);
+
+// Community Post Routes
 router.post("/createNewCommunityPost", createNewCommunityPost);
-router.get("/searchUser", userAuth, searchUser);
-router.post("/addComment", userAuth, addComment);
-router.post("/getComment", userAuth, getComment);
-router.post("/getCommentByCommentID", userAuth, getCommentByCommentID);
-router.post("/addCommentToPost", userAuth, addCommentToPost);
-router.get("/getCommentsByPostID", userAuth, getCommentsByPostID);
-router.put("/updateComment", userAuth, updateComment);
-router.delete("/deleteComment", userAuth, deleteComment);
+router.get("/getCommunityApprovedPosts", getCommunityApprovedPosts);
+
+// Community Management Routes
+router.post("/createNewCommunity", getAllCommunities); // Assuming this was implemented as per dbLogic.js
+router.get("/getAllCommunities", getAllCommunities);
+router.post("/joinCommunity", joinCommunity);
+router.delete("/leaveCommunity", leaveCommunity);
+router.get("/getUserCommunities", getUserCommunities);
+
+// User Search Routes
+router.get("/searchUser", searchUser);
+
+// Comment Routes
+router.post("/addComment", addComment);
+router.get("/getComment", getComment);
+router.get("/getCommentByCommentID", getCommentByCommentID);
+router.post("/addCommentToPost", addCommentToPost);
+router.get("/getCommentsByPostID", getCommentsByPostID);
+router.put("/updateComment", updateComment);
+router.delete("/deleteComment", deleteComment);
+
+// Messaging Routes
 router.post("/createConversation", createConversation);
 router.get("/getConversations", getConversations);
 router.post("/sendMessage", sendMessage);
 router.get("/getMessages", getMessages);
 router.get("/getLastMessage", getLastMessage);
+
+// Friend Routes
 router.get("/getUserInfo", getUserInfo);
 router.get("/checkIfFriended", checkIfFriended);
 router.post("/friendUser", friendUser);
 router.delete("/unfriendUser", unfriendUser);
 router.get("/getFriendsList", getFriendsList);
+
+// Category Routes
 router.get("/getCategories", getCategories);
 
-router.post("/fileUpload", fileHelper.single("file"), async (req, res) => {
-  try {
-    s3Upload(req, res);
-  } catch (error) {
-    res.status(400).send(error);
-  }
-});
+// Test Route
+router.get("/getTest", getTest);
 
-router.use("/", (req, res, next) => {
-  res.status(404).json({ error: "page not found" });
-});
 export default router;
