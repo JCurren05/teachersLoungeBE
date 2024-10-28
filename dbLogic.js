@@ -363,8 +363,7 @@ const getPostComments = async (req, res, next) => {
     return res.status(500).json({ message: error.stack });
   }
 };
-
-// Creates a community with the provided name
+/*
 const createNewCommunity = (req, res, next) => {
   let sql =
     "SELECT * FROM COMMUNITY WHERE CommunityName = '" +
@@ -400,6 +399,27 @@ const createNewCommunity = (req, res, next) => {
       return res.status(500).json({ message: "Community already exists!" });
     }
   });
+}; */
+const createNewCommunity = (req, res, next) => {
+    const sql = "SELECT * FROM COMMUNITY WHERE CommunityName = $1";
+    const values = [req.body.communityName];
+
+    pool.query(sql, values, (error, results) => {
+        if (error) {
+            return res.status(500).json({ message: "Server error, try again" });
+        }
+        if (results.rows.length === 0) {
+            const insertSql = "INSERT INTO COMMUNITY(CommunityName) VALUES ($1)";
+            pool.query(insertSql, values, (error, results) => {
+                if (error) {
+                    return res.status(500).json({ message: "Server error, try again" });
+                }
+                return res.status(201).json({ message: "Community created successfully" });
+            });
+        } else {
+            return res.status(500).json({ message: "Community already exists!" });
+        }
+    });
 };
 
 // Gets all communities
@@ -414,51 +434,54 @@ const getAllCommunities = (req, res, next) => {
       return res.status(500).json({ message: "Server error, try again" });
     }
 
-    return res.status(200).json({ data: results });
+    return res.status(200).json({ data: results.rows });
   });
 };
 
 // Joins a specified user to the specified community
-const joinCommunity = (req, res, next) => {
-  let sql =
-    "INSERT INTO COMMUNITY_MEMBERS VALUES (" +
-    connection.escape(req.body.communityID) +
-    "," +
-    connection.escape(req.body.userEmail) +
-    ");";
+const joinCommunity = async (req, res, next) => {
+  const client = await pool.connect();
 
-  // Run insert query
-  pool.query(sql, function (error, results) {
-    // Return error if any
-    if (error) {
-      return res.status(500).json({ message: "Server error, try again" });
-    }
+  try {
+    const sql = `
+      INSERT INTO COMMUNITY_MEMBERS (communityID, email)
+      VALUES ($1, $2);
+    `;
+    const values = [req.body.communityID, req.body.userEmail];
+    await client.query(sql, values);
 
-    return res
-      .status(201)
-      .json({ message: "User joined community successfully" });
-  });
+    return res.status(201).json({ message: "User joined community successfully" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Server error, try again" });
+  } finally {
+    client.release();
+  }
 };
 
 // Leaves a specified user from the specified community
 const leaveCommunity = (req, res, next) => {
-  let sql =
-    "DELETE FROM COMMUNITY_MEMBERS WHERE CommunityID = " +
-    connection.escape(req.query.communityID) +
-    " AND Email =" +
-    connection.escape(req.query.userEmail) +
-    ";";
+  const { communityID, userEmail } = req.query;
+  console.log(`Attempting to leave community: ${communityID}, User: ${userEmail}`);
+  
+  const sql = `
+      DELETE FROM COMMUNITY_MEMBERS
+      WHERE CommunityID = $1
+      AND Email = $2`;
 
-  // Run delete query
-  pool.query(sql, function (error, results) {
-    // Return error if any
-    if (error) {
-      return res.status(500).json({ message: "Server error, try again" });
-    }
-
-    return res
-      .status(200)
-      .json({ message: "User removed from community successfully" });
+  pool.query(sql, [communityID, userEmail], (error, results) => {
+      if (error) {
+          console.error('Error executing query:', error.stack);
+          return res.status(500).json({ message: "Server error, try again" });
+      }
+      
+      if (results.rowCount > 0) {
+          console.log('User removed successfully');
+          return res.status(200).json({ message: "User removed from community successfully" });
+      } else {
+          console.log('No rows affected');
+          return res.status(404).json({ message: "User not found in community" });
+      }
   });
 };
 
@@ -467,14 +490,14 @@ const getUserCommunities = (req, res, next) => {
   console.log('getUserCommunities hit');
   const email = req.query.email;
   const sql =
-    "SELECT c.CommunityID, c.CommunityName FROM COMMUNITY c JOIN COMMUNITY_MEMBERS cm ON c.CommunityID = cm.CommunityID WHERE cm.Email = ?";
+    "SELECT c.CommunityID, c.CommunityName FROM COMMUNITY c JOIN COMMUNITY_MEMBERS cm ON c.CommunityID = cm.CommunityID WHERE cm.Email = $1";
 
   pool.query(sql, [email], function (error, results) {
     if (error) {
       return res.status(500).json({ message: "Server error, try again" });
     }
 
-    return res.status(200).json({ data: results });
+    return res.status(200).json({ data: results.rows });
   });
 };
 
@@ -482,30 +505,27 @@ const getCommunityApprovedPosts = (req, res, next) => {
   console.log('getCommApprovedPosts hit');
   var community = Number(req.query.communityID);
   var category = Number(req.query.category);
-  var sql =
-    category === 0
-      ? `SELECT P.*, SUM(PLikes.PostID IS NOT NULL) AS likesCount 
-      FROM POST P 
-      LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID 
-      WHERE P.Approved = 1 AND P.CommunityID= ${connection.escape(community)} 
-      GROUP BY P.PostID`
-      : `SELECT P.*, SUM(PLikes.PostID IS NOT NULL) AS likesCount 
-      FROM POST P 
-      LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID 
-      WHERE P.Approved = 1 AND P.CategoryID = ${connection.escape(
-        category
-      )} AND P.CommunityID= ${connection.escape(community)} 
-      GROUP BY P.PostID`;
-
-  pool.query(sql, function (error, results, fields) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: error.stack });
-    }
-
-    return res.status(200).json({ data: results });
+  var sql = category === 0
+  ? `SELECT P.*, SUM(CASE WHEN PLikes.PostID IS NOT NULL THEN 1 ELSE 0 END) AS likesCount
+     FROM POST P
+     LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID
+     WHERE P.Approved = 1 AND P.CommunityID = ${community}
+     GROUP BY P.PostID, P.Approved, P.CategoryID, P.CommunityID, P.FirstName, P.Content, P.Email, P.FileURL, P.FileDisplayName, P.FileType`
+  : `SELECT P.*, SUM(CASE WHEN PLikes.PostID IS NOT NULL THEN 1 ELSE 0 END) AS likesCount
+     FROM POST P
+     LEFT JOIN POST_LIKES PLikes ON P.PostID = PLikes.PostID
+     WHERE P.Approved = 1 AND P.CategoryID = ${category} AND P.CommunityID = ${community}
+     GROUP BY P.PostID, P.Approved, P.CategoryID, P.CommunityID, P.FirstName, P.Content, P.Email, P.FileURL, P.FileDisplayName, P.FileType`;
+  
+  pool.query(sql, (error, results) => {
+      if (error) {
+          console.error(error.stack); 
+          return res.status(500).json({ message: error.stack });
+      }
+      return res.status(200).json({ data: results });
   });
 };
+
 
 const createNewCommunityPost = (req, res, next) => {
   var sql =
@@ -686,79 +706,50 @@ const deleteComment = (req, res, next) => {
 };
 
 // Creates a new conversation
-const createConversation = (req, res, next) => {
+const createConversation = async (req, res, next) => {
   // Get sender and receiver email
   const senderEmail = req.body.senderEmail;
   const receiverEmail = req.body.receiverEmail;
-  let conversationId = null;
 
-  // Check if conversation already exists
-  let sql = `SELECT *
-            FROM CONVERSATION_MEMBERS cm1
-            JOIN CONVERSATION_MEMBERS cm2 ON cm1.ConversationID = cm2.ConversationID
-            WHERE cm1.Email = ${connection.escape(senderEmail)}
-            AND cm2.Email = ${connection.escape(receiverEmail)}; `;
+  try {
+    // Check if conversation already exists
+    const checkConversationSql = `SELECT *
+                                  FROM CONVERSATION_MEMBERS cm1
+                                  JOIN CONVERSATION_MEMBERS cm2 ON cm1.ConversationID = cm2.ConversationID
+                                  WHERE cm1.Email = $1 AND cm2.Email = $2;`;
 
-  pool.query(sql, function (error, results) {
-    if (error) {
-      return res
-        .status(500)
-        .json({ message: "Server error, Couldn't create conversation" });
+    const existingConversation = await pool.query(checkConversationSql, [senderEmail, receiverEmail]);
+
+    if (existingConversation.rows.length > 0) {
+      return res.status(400).json({ message: "Conversation already exists" });
     }
 
-    if (results.length > 0) {
-      return res.status(500).json({ message: "Conversation already exists" });
-    } else {
-      // Create conversation
-      sql = `INSERT INTO CONVERSATION(Title) 
-  VALUES ('Default Conversation');`;
+    // Create new conversation
+    const createConversationSql = `INSERT INTO CONVERSATION(Title) 
+                                   VALUES ('Default Conversation') RETURNING ConversationID;`;
 
-      pool.query(sql, function (error, results) {
-        if (error) {
-          console.error(error.stack);
-          return res
-            .status(500)
-            .json({ message: "Server error, Couldn't create conversation" });
-        }
+    const newConversation = await pool.query(createConversationSql);
+    const conversationId = newConversation.rows[0].conversationid;
 
-        // Set conversation ID
-        conversationId = results.insertId;
+    // Insert 1st member of conversation
+    const addSenderSql = `INSERT INTO CONVERSATION_MEMBERS(ConversationID, Email) 
+                          VALUES ($1, $2);`;
+    await pool.query(addSenderSql, [conversationId, senderEmail]);
 
-        // Insert 1st member of conversation
-        sql = `INSERT INTO CONVERSATION_MEMBERS(ConversationID, Email) 
-VALUES (${connection.escape(conversationId)}, ${connection.escape(
-          senderEmail
-        )});`;
-        pool.query(sql, function (error, results) {
-          if (error) {
-            console.error(error.stack);
-            return res
-              .status(500)
-              .json({ message: "Server error, Couldn't add sender" });
-          }
-        });
+    // Insert 2nd member of conversation
+    const addReceiverSql = `INSERT INTO CONVERSATION_MEMBERS(ConversationID, Email) 
+                            VALUES ($1, $2);`;
+    await pool.query(addReceiverSql, [conversationId, receiverEmail]);
 
-        // Insert 2nd member of conversation
-        sql = `INSERT INTO CONVERSATION_MEMBERS(ConversationID, Email) 
-VALUES (${connection.escape(conversationId)}, ${connection.escape(
-          receiverEmail
-        )});`;
-        pool.query(sql, function (error, results) {
-          if (error) {
-            console.error(error.stack);
-            return res
-              .status(500)
-              .json({ message: "Server error, Couldn't add receiver" });
-          }
+    // Success response
+    return res.status(200).json({ message: "Conversation created successfully" });
 
-          return res
-            .status(200)
-            .json({ message: "Conversation created successfully" });
-        });
-      });
-    }
-  });
+  } catch (error) {
+    console.error('Error creating conversation:', error);
+    return res.status(500).json({ message: "Server error, couldn't create conversation" });
+  }
 };
+
 
 // Gets conversations for a user
 const getConversations = async (req, res, next) => {
@@ -766,15 +757,15 @@ const getConversations = async (req, res, next) => {
   const userEmail = req.query.userEmail;
 
   const sql = `
-    SELECT c.ConversationID, GROUP_CONCAT(cm.Email) AS members
-    FROM CONVERSATION AS c
-    LEFT JOIN CONVERSATION_MEMBERS AS cm ON c.ConversationID = cm.ConversationID
-    WHERE c.ConversationID IN (
-      SELECT ConversationID
-      FROM CONVERSATION_MEMBERS
-      WHERE Email = $1
+    SELECT c.conversationid, string_agg(cm.email, ',') AS members
+    FROM conversation AS c
+    LEFT JOIN conversation_members AS cm ON c.conversationid = cm.conversationid
+    WHERE c.conversationid IN (
+      SELECT conversationid
+      FROM conversation_members
+      WHERE email = $1
     )
-    GROUP BY c.ConversationID;
+    GROUP BY c.conversationid;
   `;
 
   const client = await pool.connect();
@@ -782,12 +773,16 @@ const getConversations = async (req, res, next) => {
   try {
     const results = await client.query(sql, [userEmail]);
 
+    if (!results.rows.length) {
+      return res.status(404).json({ message: "No conversations found" });
+    }
+
     let conversations = results.rows.map(row => {
       let members = row.members.split(",");
       let title = members.find(email => email !== userEmail)?.split("@")[0];
 
       return {
-        conversationId: row.ConversationID,
+        conversationId: row.conversationid,
         members,
         title
       };
@@ -795,70 +790,74 @@ const getConversations = async (req, res, next) => {
 
     return res.status(200).json({ data: conversations });
   } catch (error) {
-    console.error(error.stack);
-    return res.status(500).json({ message: "Server error, try again" });
+    console.error('Error fetching conversations:', error.stack);
+    return res.status(500).json({ message: "Server error, please try again later" });
   } finally {
     client.release();
   }
 };
+
 // Sends a message
-const sendMessage = (req, res, next) => {
-  const message = req.body.message;
-  const conversationId = Number(req.body.conversationId);
-  const senderEmail = req.body.senderEmail;
+const sendMessage = async (req, res, next) => {
+  const { message, conversationId, senderEmail } = req.body; // Changed conversation_Id to conversationId
 
-  const sql = `INSERT INTO MESSAGE(Content, ConversationID, Sender)
-              VALUES (${connection.escape(message)}, ${connection.escape(
-    conversationId
-  )}, ${connection.escape(senderEmail)});`;
+  // SQL query using parameterized placeholders
+  const sql = `INSERT INTO MESSAGE(Content, Conversation_ID, Sender)
+               VALUES ($1, $2, $3)`;
 
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
+  try {
+    // Using pool.query to run the SQL command with the parameters
+    const result = await pool.query(sql, [message, conversationId, senderEmail]);
 
+    // If the query was successful, send a success response
     return res.status(200).json({ message: "Message sent successfully" });
-  });
+  } catch (error) {
+    // Log any error that occurs and send a 500 error response
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
+
+
 
 // Gets messages for a conversation
-const getMessages = (req, res, next) => {
+// Gets messages for a conversation
+const getMessages = async (req, res, next) => {
   console.log('getMessages hit');
-  const conversationId = Number(req.query.conversationId);
+  const conversationId = Number(req.query.conversationId); // Ensure this is a number
 
-  const sql = `SELECT * FROM MESSAGE WHERE ConversationID = ${connection.escape(
-    conversationId
-  )};`;
+  // Use the correct column name
+  const sql = `SELECT * FROM MESSAGE WHERE conversation_id = $1;`;
 
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
-
-    return res.status(200).json({ data: results });
-  });
+  try {
+    // Pass parameters as an array
+    const result = await pool.query(sql, [conversationId]);
+    return res.status(200).json({ data: result.rows });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
 
+
 // Gets the last message in a conversation
-const getLastMessage = (req, res, next) => {
+const getLastMessage = async (req, res, next) => {
   const conversationId = Number(req.query.conversationId);
 
+  // Use a parameterized query
   const sql = `SELECT * FROM MESSAGE
-              WHERE ConversationID = ${connection.escape(conversationId)}
-              ORDER BY MessageID DESC
-              LIMIT 1;
-              `;
+              WHERE Conversation_ID = $1
+              ORDER BY Message_ID DESC
+              LIMIT 1;`;
 
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
-
-    return res.status(200).json({ data: results });
-  });
+  try {
+    // Pass parameters as an array
+    const result = await pool.query(sql, [conversationId]);
+    return res.status(200).json({ data: result.rows });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
 
 const getUserInfo = async (req, res, next) => {
