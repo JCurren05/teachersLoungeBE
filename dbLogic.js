@@ -306,12 +306,24 @@ const getAllApprovedPosts = async (req, res, next) => {
 };
 
 
+const fileUpload = async (req, res, next) => {
+  console.log('File upload hit');
+  console.log(req.body)
+
+  try {
+    const result = await pool.query(sql, values);
+    return res.status(200).json({ data: result.rows[0] });
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: error.stack });
+  }
+};
 //Database functionality with likes and comments has not been implemented yet but these functions are how we imagine that would happen...
 // Create a new post
 const createNewPost = async (req, res, next) => {
   const sql = `
-    INSERT INTO POST (content, email, categoryid, fileurl, filedisplayname, filetype)
-    VALUES ($1, $2, $3, $4, $5, $6)
+    INSERT INTO POST (content, email, categoryid, fileurl, filedisplayname, filetype, approved)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
     RETURNING *`;
   const values = [
     req.body.content,
@@ -1024,6 +1036,7 @@ export {
   likePost,
   createNewUser,
   createNewPost,
+  fileUpload,
   getAllApprovedPosts,
   createNewCommunity,
   getAllCommunities,

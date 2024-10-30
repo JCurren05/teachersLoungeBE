@@ -14,6 +14,7 @@ import {
   approveUser,
   deleteUser,
   createNewUser,
+  fileUpload,
   //getSpecificUser,
   //promoteUser,
   getAllCommunities,
@@ -58,6 +59,7 @@ router.delete("/deleteUser", deleteUser);
 //router.post("/promoteUser", promoteUser);
 
 // Post Routes
+router.post("/fileUpload", fileUpload);
 router.post("/createNewPost", createNewPost);
 router.get("/getAllApprovedPosts", getAllApprovedPosts);
 router.get("/getPendingPosts", getPendingPosts);
