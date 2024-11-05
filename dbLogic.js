@@ -321,6 +321,7 @@ const fileUpload = async (req, res, next) => {
 //Database functionality with likes and comments has not been implemented yet but these functions are how we imagine that would happen...
 // Create a new post
 const createNewPost = async (req, res, next) => {
+  console.log(req.body);
   const sql = `
     INSERT INTO POST (content, email, categoryid, fileurl, filedisplayname, filetype, approved)
     VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -328,10 +329,10 @@ const createNewPost = async (req, res, next) => {
   const values = [
     req.body.content,
     req.body.email,
-    req.body.categoryid,
-    req.body.fileurl,
-    req.body.filedisplayname,
-    req.body.filetype,
+    req.body.category,
+    req.body.filePath,
+    req.body.fileDisplayName,
+    req.body.fileType,
     req.body.approved || 1 //to approve posts by default
   ];
 
