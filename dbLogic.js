@@ -294,6 +294,7 @@ const getUserPosts = async (req, res, next) => {
 
 // Get all approved posts
 const getAllApprovedPosts = async (req, res, next) => {
+  console.log('getAllApprovedPosts hit')
   try {
     const sql = "SELECT * FROM POST WHERE approved = $1";
     const results = await pool.query(sql, [1]); // 1 for approved posts
