@@ -243,21 +243,31 @@ const approvePost = async (req, res, next) => {
 };
 
 // Delete a post
+// const deletePost = async (req, res, next) => {
+//   try {
+//     // Delete likes associated with the post
+//     const deleteLikesSql = "DELETE FROM POST_LIKES WHERE postid = $1";
+//     await pool.query(deleteLikesSql, [req.body.postid]);
+
+//     // Delete comments associated with the post
+//     const deleteCommentsSql = "DELETE FROM COMMENTS_TO_POST WHERE postid = $1";
+//     await pool.query(deleteCommentsSql, [req.body.postid]);
+
+//     // Delete the post itself
+//     const deletePostSql = "DELETE FROM POST WHERE postid = $1";
+//     await pool.query(deletePostSql, [req.body.postid]);
+
+//     return res.status(200).json({ message: "Post deleted successfully" });
+//   } catch (error) {
+//     console.error(error.stack);
+//     return res.status(500).json({ message: error.stack });
+//   }
+// };
+
 const deletePost = async (req, res, next) => {
+  console.log("Delete post function hit");
   try {
-    // Delete likes associated with the post
-    const deleteLikesSql = "DELETE FROM POST_LIKES WHERE postid = $1";
-    await pool.query(deleteLikesSql, [req.body.postid]);
-
-    // Delete comments associated with the post
-    const deleteCommentsSql = "DELETE FROM COMMENTS_TO_POST WHERE postid = $1";
-    await pool.query(deleteCommentsSql, [req.body.postid]);
-
-    // Delete the post itself
-    const deletePostSql = "DELETE FROM POST WHERE postid = $1";
-    await pool.query(deletePostSql, [req.body.postid]);
-
-    return res.status(200).json({ message: "Post deleted successfully" });
+    // (delete statements for likes, comments, post)
   } catch (error) {
     console.error(error.stack);
     return res.status(500).json({ message: error.stack });
