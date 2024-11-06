@@ -933,7 +933,7 @@ const friendUser = async (req, res, next) => {
   const frienderEmail = req.body.frienderEmail;
   const friendeeEmail = req.body.friendeeEmail;
 
-  const sql = `INSERT INTO FRIENDS (Friendee, Friender) VALUES ($1, $2)`;
+  const sql = `INSERT INTO FRIENDS (friendee, friender) VALUES ($1, $2)`;
 
   try {
     const client = await pool.connect();
@@ -951,12 +951,14 @@ const friendUser = async (req, res, next) => {
 
 const unfriendUser = async (req, res, next) => {
   console.log('unfriendUser hit');
+  console.log(req.query.frienderEmail);
+  console.log(req.query.friendeeEmail);
   const frienderEmail = req.query.frienderEmail;
   const friendeeEmail = req.query.friendeeEmail;
 
   const sql = `
     DELETE FROM FRIENDS
-    WHERE Friendee = $1 AND Friender = $2;
+    WHERE friendee = $1 AND friender = $2;
   `;
 
   try {
@@ -980,15 +982,16 @@ const unfriendUser = async (req, res, next) => {
 const getFriendsList = async (req, res, next) => {
   console.log('getFriends hit');
   const userEmail = req.query.userEmail;
+  console.log(req.query.userEmail);
 
-  const sql = `SELECT U.Email, U.FirstName, U.LastName, U.SchoolID, U.Role
+  const sql = `SELECT U.email, U.firstname, U.lastname, U.schoolid, U.role
                FROM USERS AS U JOIN 
-                  (SELECT Friendee AS FriendEmail FROM FRIENDS
-                   WHERE Friender = $1
+                  (SELECT friendee AS FriendEmail FROM FRIENDS
+                   WHERE friender = $1
                    INTERSECT 
-                   SELECT Friender AS FriendEmail FROM FRIENDS
-                   WHERE Friendee = $1) AS FriendsTable
-               ON FriendsTable.FriendEmail = U.Email;`;
+                   SELECT friender AS FriendEmail FROM FRIENDS
+                   WHERE friendee = $1) AS FriendsTable
+               ON FriendsTable.FriendEmail = U.email;`;
 
   try {
       const client = await pool.connect();
@@ -997,6 +1000,7 @@ const getFriendsList = async (req, res, next) => {
 
       client.release();
 
+      console.log(result.rows);
       return res.status(200).json({ data: result.rows });
   } catch (error) {
       console.error("Error retrieving friends list:", error.stack);
