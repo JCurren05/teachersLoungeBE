@@ -244,18 +244,20 @@ const approvePost = async (req, res, next) => {
 
 // Delete a post
 const deletePost = async (req, res, next) => {
-  try {
+  console.log('delete posts hit');
+  console.log(req.body.id);
+  try{
     // Delete likes associated with the post
     const deleteLikesSql = "DELETE FROM POST_LIKES WHERE postid = $1";
-    await pool.query(deleteLikesSql, [req.body.postid]);
+    await pool.query(deleteLikesSql, [req.body.id]);
 
     // Delete comments associated with the post
     const deleteCommentsSql = "DELETE FROM COMMENTS_TO_POST WHERE postid = $1";
-    await pool.query(deleteCommentsSql, [req.body.postid]);
+    await pool.query(deleteCommentsSql, [req.body.id]);
 
     // Delete the post itself
     const deletePostSql = "DELETE FROM POST WHERE postid = $1";
-    await pool.query(deletePostSql, [req.body.postid]);
+    await pool.query(deletePostSql, [req.body.id]);
 
     return res.status(200).json({ message: "Post deleted successfully" });
   } catch (error) {
@@ -947,21 +949,32 @@ const friendUser = async (req, res, next) => {
   }
 };
 
-const unfriendUser = (req, res, next) => {
+const unfriendUser = async (req, res, next) => {
+  console.log('unfriendUser hit');
   const frienderEmail = req.query.frienderEmail;
   const friendeeEmail = req.query.friendeeEmail;
 
-  const sql = `DELETE FROM FRIENDS WHERE Friendee = 
-              ${connection.escape(friendeeEmail)} AND Friender = 
-              ${connection.escape(frienderEmail)};`;
+  const sql = `
+    DELETE FROM FRIENDS
+    WHERE Friendee = $1 AND Friender = $2;
+  `;
 
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
+  try {
+    const client = await pool.connect();
+
+    const result = await client.query(sql, [friendeeEmail, frienderEmail]);
+
+    client.release();
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Friendship not found" });
     }
-    return res.status(201).json({ message: "User unfriended successfully" });
-  });
+
+    return res.status(200).json({ message: "User unfriended successfully" });
+  } catch (error) {
+    console.error("Error unfriending user:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
 
 const getFriendsList = async (req, res, next) => {
