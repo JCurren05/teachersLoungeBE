@@ -40,7 +40,8 @@ import {
   unfriendUser,
   getFriendsList,
   getCategories,
-  getTest
+  getTest,
+  createNewCommunity
 } from "./dbLogic.js";
 
 const router = express.Router();
@@ -71,7 +72,7 @@ router.post("/createNewCommunityPost", createNewCommunityPost);
 router.get("/getCommunityApprovedPosts", getCommunityApprovedPosts);
 
 // Community Management Routes
-router.post("/createNewCommunity", getAllCommunities); // Assuming this was implemented as per dbLogic.js
+router.post("/createNewCommunity", createNewCommunity); // Assuming this was implemented as per dbLogic.js
 router.get("/getAllCommunities", getAllCommunities);
 router.post("/joinCommunity", joinCommunity);
 router.delete("/leaveCommunity", leaveCommunity);

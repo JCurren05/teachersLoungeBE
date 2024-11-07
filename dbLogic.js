@@ -427,7 +427,9 @@ const createNewCommunity = (req, res, next) => {
   });
 }; */
 const createNewCommunity = (req, res, next) => {
-    const sql = "SELECT * FROM COMMUNITY WHERE CommunityName = $1";
+  console.log('create new community hit');
+    const sql = "SELECT * FROM COMMUNITY WHERE communityname = $1";
+    console.log(req.body);
     const values = [req.body.communityName];
 
     pool.query(sql, values, (error, results) => {
@@ -435,7 +437,7 @@ const createNewCommunity = (req, res, next) => {
             return res.status(500).json({ message: "Server error, try again" });
         }
         if (results.rows.length === 0) {
-            const insertSql = "INSERT INTO COMMUNITY(CommunityName) VALUES ($1)";
+            const insertSql = "INSERT INTO COMMUNITY(communityname) VALUES ($1)";
             pool.query(insertSql, values, (error, results) => {
                 if (error) {
                     return res.status(500).json({ message: "Server error, try again" });
@@ -470,7 +472,7 @@ const joinCommunity = async (req, res, next) => {
 
   try {
     const sql = `
-      INSERT INTO COMMUNITY_MEMBERS (communityID, email)
+      INSERT INTO COMMUNITY_MEMBERS (communityid, email)
       VALUES ($1, $2);
     `;
     const values = [req.body.communityID, req.body.userEmail];
@@ -516,7 +518,7 @@ const getUserCommunities = (req, res, next) => {
   console.log('getUserCommunities hit');
   const email = req.query.email;
   const sql =
-    "SELECT c.CommunityID, c.CommunityName FROM COMMUNITY c JOIN COMMUNITY_MEMBERS cm ON c.CommunityID = cm.CommunityID WHERE cm.Email = $1";
+    "SELECT c.communityid, c.communityname FROM COMMUNITY c JOIN COMMUNITY_MEMBERS cm ON c.communityid = cm.communityid WHERE cm.email = $1";
 
   pool.query(sql, [email], function (error, results) {
     if (error) {
