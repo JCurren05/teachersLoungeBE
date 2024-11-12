@@ -39,9 +39,11 @@ import {
   friendUser,
   unfriendUser,
   getFriendsList,
+  getPendingFriendRequests,
   getCategories,
   getTest,
-  createNewCommunity
+  createNewCommunity,
+  getSentFriendRequests
 } from "./dbLogic.js";
 
 const router = express.Router();
@@ -103,6 +105,8 @@ router.get("/checkIfFriended", checkIfFriended);
 router.post("/friendUser", friendUser);
 router.delete("/unfriendUser", unfriendUser);
 router.get("/getFriendsList", getFriendsList);
+router.get("/getSentFriendRequests", getSentFriendRequests);
+router.get("/getPendingFriendRequests", getPendingFriendRequests);
 
 // Category Routes
 router.get("/getCategories", getCategories);
