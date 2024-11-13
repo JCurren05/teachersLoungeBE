@@ -7,6 +7,7 @@ const login = (req,res,next)=>{
 
 
 const register = (req,res,next)=>{
+    console.log('test');
     db.registerNewUser(req,res,next);
 }
 

@@ -14,5 +14,5 @@ app.use((_, res, next) => {
 
 app.use(router);
 
-app.listen(process.env.PORT || 5000);
+app.listen(process.env.PORT || 4001);
 console.log("server running");
