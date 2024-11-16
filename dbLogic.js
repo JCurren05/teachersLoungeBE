@@ -194,6 +194,67 @@ const deleteUser = (req, res, next) => {
   });
 };
 
+const updateUserInfo = async (req, res, next) => {
+  const client = await pool.connect();
+
+  try {
+    const { email, newEmail, firstname, lastname } = req.body;
+
+    console.log("Received request to update user info for email:", email);
+
+    // Validate email
+    if (!email) {
+      return res.status(400).json({ message: "Email is required." });
+    }
+
+    // Query to find the user
+    const checkUserQuery = "SELECT * FROM USERS WHERE LOWER(email) = LOWER($1)";
+    const userResult = await client.query(checkUserQuery, [email.trim()]);
+
+    if (userResult.rows.length === 0) {
+      console.error("User not found for email:", email);
+      return res.status(404).json({ message: `User not found for email: ${email}` });
+    }
+
+    // Proceed with update logic
+    let updateQuery = "UPDATE USERS SET";
+    const updateValues = [];
+    let index = 1;
+
+    if (newEmail) {
+      updateQuery += ` email = $${index},`;
+      updateValues.push(newEmail.trim());
+      index++;
+    }
+    if (firstname) {
+      updateQuery += ` firstname = $${index},`;
+      updateValues.push(firstname.trim());
+      index++;
+    }
+    if (lastname) {
+      updateQuery += ` lastname = $${index},`;
+      updateValues.push(lastname.trim());
+      index++;
+    }
+
+    updateQuery = updateQuery.slice(0, -1); // Remove trailing comma
+    updateQuery += ` WHERE LOWER(email) = LOWER($${index})`;
+    updateValues.push(email.trim());
+
+    const updateResult = await client.query(updateQuery, updateValues);
+
+    console.log("User info updated successfully:", updateValues);
+
+    return res.status(200).json({ message: "User information updated successfully." });
+  } catch (error) {
+    console.error("Error updating user info:", error.stack);
+    return res.status(500).json({ message: "Server error." });
+  } finally {
+    client.release();
+  }
+};
+
+
 const getApprovedUsers = (req, res, next) => {
   console.log('getApprovedUsers hit');
   pool.query(
@@ -1129,6 +1190,7 @@ export {
   approvePost,
   deletePost,
   deleteUser,
+  updateUserInfo,
   approveUser,
   connectDB,
   disconnectDB,

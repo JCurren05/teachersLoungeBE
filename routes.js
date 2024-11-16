@@ -8,6 +8,7 @@ import {
   createNewCommunityPost,
   getCommunityApprovedPosts,
   verifyUserLogin,
+  updateUserInfo,
   registerNewUser,
   getApprovedUsers,
   getPendingUsers,
@@ -58,6 +59,7 @@ router.get("/getApprovedUsers", getApprovedUsers);
 router.get("/getPendingUsers", getPendingUsers);
 router.post("/approveUser", approveUser);
 router.delete("/deleteUser", deleteUser);
+router.patch("/updateUserInfo", updateUserInfo);
 //router.get("/getSpecificUser", getSpecificUser); // Assuming this function will be implemented similarly to getApprovedUsers
 //router.post("/promoteUser", promoteUser);
 
