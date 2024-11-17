@@ -208,7 +208,7 @@ const updateUserInfo = async (req, res, next) => {
     }
 
     // Query to find the user
-    const checkUserQuery = "SELECT * FROM USERS WHERE LOWER(email) = LOWER($1)";
+    const checkUserQuery = "SELECT * FROM USERS WHERE email = $1";
     const userResult = await client.query(checkUserQuery, [email.trim()]);
 
     if (userResult.rows.length === 0) {
@@ -237,10 +237,16 @@ const updateUserInfo = async (req, res, next) => {
       index++;
     }
 
+    // Check if there are any fields to update
+    if (updateValues.length === 0) {
+      return res.status(400).json({ message: "No fields to update provided." });
+    }
+
     updateQuery = updateQuery.slice(0, -1); // Remove trailing comma
     updateQuery += ` WHERE LOWER(email) = LOWER($${index})`;
     updateValues.push(email.trim());
 
+    // Execute the query
     const updateResult = await client.query(updateQuery, updateValues);
 
     console.log("User info updated successfully:", updateValues);
@@ -253,6 +259,7 @@ const updateUserInfo = async (req, res, next) => {
     client.release();
   }
 };
+
 
 
 const getApprovedUsers = (req, res, next) => {
