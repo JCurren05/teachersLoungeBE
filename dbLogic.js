@@ -32,8 +32,9 @@ const verifyUserLogin = async (req, res, next) => {
 
     if (results.rows.length > 0) {
       const user = results.rows[0];
-      const match = true; // Replace this with actual password comparison logic
-      // const match = await bcrypt.compare(req.body.password, user.Password);
+      console.log(user);
+    
+      const match = await bcrypt.compare(req.body.password, user.password);
 
       if (!match) {
         return res.status(400).json({ message: "Incorrect password" });
