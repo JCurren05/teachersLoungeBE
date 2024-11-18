@@ -17,6 +17,7 @@ import {
   fileUpload,
   //getSpecificUser,
   //promoteUser,
+  updateUserInfo,
   getAllCommunities,
   joinCommunity,
   leaveCommunity,
@@ -51,6 +52,7 @@ const router = express.Router();
 // Authentication Routes
 router.post("/login", verifyUserLogin);
 router.post("/register", registerNewUser);
+router.patch("/updateUserInfo", updateUserInfo);
 
 // User Management Routes
 router.post("/createNewUser", createNewUser);
