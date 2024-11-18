@@ -243,19 +243,21 @@ const approvePost = async (req, res, next) => {
 };
 
 // Delete a post
-// const deletePost = async (req, res, next) => {
-//   try {
-//     // Delete likes associated with the post
-//     const deleteLikesSql = "DELETE FROM POST_LIKES WHERE postid = $1";
-//     await pool.query(deleteLikesSql, [req.body.postid]);
+const deletePost = async (req, res, next) => {
+  console.log('delete posts hit');
+  console.log(req.body.id);
+  try{
+    // Delete likes associated with the post
+    const deleteLikesSql = "DELETE FROM POST_LIKES WHERE postid = $1";
+    await pool.query(deleteLikesSql, [req.body.id]);
 
-//     // Delete comments associated with the post
-//     const deleteCommentsSql = "DELETE FROM COMMENTS_TO_POST WHERE postid = $1";
-//     await pool.query(deleteCommentsSql, [req.body.postid]);
+    // Delete comments associated with the post
+    const deleteCommentsSql = "DELETE FROM COMMENTS_TO_POST WHERE postid = $1";
+    await pool.query(deleteCommentsSql, [req.body.id]);
 
-//     // Delete the post itself
-//     const deletePostSql = "DELETE FROM POST WHERE postid = $1";
-//     await pool.query(deletePostSql, [req.body.postid]);
+    // Delete the post itself
+    const deletePostSql = "DELETE FROM POST WHERE postid = $1";
+    await pool.query(deletePostSql, [req.body.id]);
 
 //     return res.status(200).json({ message: "Post deleted successfully" });
 //   } catch (error) {
@@ -332,6 +334,7 @@ const fileUpload = async (req, res, next) => {
 //Database functionality with likes and comments has not been implemented yet but these functions are how we imagine that would happen...
 // Create a new post
 const createNewPost = async (req, res, next) => {
+  console.log('create new post hit');
   console.log(req.body);
   const sql = `
     INSERT INTO POST (content, email, categoryid, fileurl, filedisplayname, filetype, approved)
@@ -435,7 +438,9 @@ const createNewCommunity = (req, res, next) => {
   });
 }; */
 const createNewCommunity = (req, res, next) => {
-    const sql = "SELECT * FROM COMMUNITY WHERE CommunityName = $1";
+  console.log('create new community hit');
+    const sql = "SELECT * FROM COMMUNITY WHERE communityname = $1";
+    console.log(req.body);
     const values = [req.body.communityName];
 
     pool.query(sql, values, (error, results) => {
@@ -443,7 +448,7 @@ const createNewCommunity = (req, res, next) => {
             return res.status(500).json({ message: "Server error, try again" });
         }
         if (results.rows.length === 0) {
-            const insertSql = "INSERT INTO COMMUNITY(CommunityName) VALUES ($1)";
+            const insertSql = "INSERT INTO COMMUNITY(communityname) VALUES ($1)";
             pool.query(insertSql, values, (error, results) => {
                 if (error) {
                     return res.status(500).json({ message: "Server error, try again" });
@@ -478,7 +483,7 @@ const joinCommunity = async (req, res, next) => {
 
   try {
     const sql = `
-      INSERT INTO COMMUNITY_MEMBERS (communityID, email)
+      INSERT INTO COMMUNITY_MEMBERS (communityid, email)
       VALUES ($1, $2);
     `;
     const values = [req.body.communityID, req.body.userEmail];
@@ -524,7 +529,7 @@ const getUserCommunities = (req, res, next) => {
   console.log('getUserCommunities hit');
   const email = req.query.email;
   const sql =
-    "SELECT c.CommunityID, c.CommunityName FROM COMMUNITY c JOIN COMMUNITY_MEMBERS cm ON c.CommunityID = cm.CommunityID WHERE cm.Email = $1";
+    "SELECT c.communityid, c.communityname FROM COMMUNITY c JOIN COMMUNITY_MEMBERS cm ON c.communityid = cm.communityid WHERE cm.email = $1";
 
   pool.query(sql, [email], function (error, results) {
     if (error) {
@@ -536,8 +541,10 @@ const getUserCommunities = (req, res, next) => {
 };
 
 const getCommunityApprovedPosts = async (req, res, next) => {
-  const communityID = Number(req.query.communityID);
-  const categoryID = Number(req.query.categoryid);
+  console.log('getCommunityApprovedposts hit');
+  console.log(req.query);
+  const communityID = parseInt(req.query.communityID);
+  const categoryID = parseInt(req.query.category);
 
   const sql = categoryID === 0
     ? `SELECT P.*, COALESCE(COUNT(PL.postid), 0) AS likesCount
@@ -638,9 +645,9 @@ const addComment = (req, res, next) => {
 const getComment = (req, res, next) => {
   console.log('getComment hit');
   var sql =
-    "SELECT * FROM COMMENT WHERE Email =" +
+    "SELECT * FROM COMMENT WHERE email =" +
     connection.escape(req.body.email) +
-    " AND Content=" +
+    " AND content=" +
     connection.escape(req.body.content);
   pool.query(sql, function (error, results, fields) {
     if (error) {
@@ -941,7 +948,7 @@ const friendUser = async (req, res, next) => {
   const frienderEmail = req.body.frienderEmail;
   const friendeeEmail = req.body.friendeeEmail;
 
-  const sql = `INSERT INTO FRIENDS (Friendee, Friender) VALUES ($1, $2)`;
+  const sql = `INSERT INTO FRIENDS (friendee, friender) VALUES ($1, $2)`;
 
   try {
     const client = await pool.connect();
@@ -957,35 +964,49 @@ const friendUser = async (req, res, next) => {
   }
 };
 
-const unfriendUser = (req, res, next) => {
+const unfriendUser = async (req, res, next) => {
+  console.log('unfriendUser hit');
+  console.log(req.query.frienderEmail);
+  console.log(req.query.friendeeEmail);
   const frienderEmail = req.query.frienderEmail;
   const friendeeEmail = req.query.friendeeEmail;
 
-  const sql = `DELETE FROM FRIENDS WHERE Friendee = 
-              ${connection.escape(friendeeEmail)} AND Friender = 
-              ${connection.escape(frienderEmail)};`;
+  const sql = `
+    DELETE FROM FRIENDS
+    WHERE friendee = $1 AND friender = $2;
+  `;
 
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
+  try {
+    const client = await pool.connect();
+
+    const result = await client.query(sql, [friendeeEmail, frienderEmail]);
+
+    client.release();
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "Friendship not found" });
     }
-    return res.status(201).json({ message: "User unfriended successfully" });
-  });
+
+    return res.status(200).json({ message: "User unfriended successfully" });
+  } catch (error) {
+    console.error("Error unfriending user:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
 };
 
 const getFriendsList = async (req, res, next) => {
   console.log('getFriends hit');
   const userEmail = req.query.userEmail;
+  console.log(req.query.userEmail);
 
-  const sql = `SELECT U.Email, U.FirstName, U.LastName, U.SchoolID, U.Role
+  const sql = `SELECT U.email, U.firstname, U.lastname, U.schoolid, U.role
                FROM USERS AS U JOIN 
-                  (SELECT Friendee AS FriendEmail FROM FRIENDS
-                   WHERE Friender = $1
+                  (SELECT friendee AS FriendEmail FROM FRIENDS
+                   WHERE friender = $1
                    INTERSECT 
-                   SELECT Friender AS FriendEmail FROM FRIENDS
-                   WHERE Friendee = $1) AS FriendsTable
-               ON FriendsTable.FriendEmail = U.Email;`;
+                   SELECT friender AS FriendEmail FROM FRIENDS
+                   WHERE friendee = $1) AS FriendsTable
+               ON FriendsTable.FriendEmail = U.email;`;
 
   try {
       const client = await pool.connect();
@@ -994,12 +1015,96 @@ const getFriendsList = async (req, res, next) => {
 
       client.release();
 
+      console.log(result.rows);
       return res.status(200).json({ data: result.rows });
   } catch (error) {
       console.error("Error retrieving friends list:", error.stack);
       return res.status(500).json({ message: "Server error, try again" });
   }
 };
+
+
+const getSentFriendRequests = async (req, res, next) => {
+  console.log('getFriendRequests hit -------------');
+  const userEmail = req.query.userEmail;
+  console.log(req.query.userEmail);
+
+  const sql = `
+    SELECT U.email, U.firstname, U.lastname, U.schoolid, U.role
+    FROM USERS AS U
+    JOIN (
+        SELECT friendee AS FriendEmail 
+        FROM FRIENDS AS F1
+        WHERE F1.friender = $1
+          AND NOT EXISTS (
+              SELECT 1 
+              FROM FRIENDS AS F2
+              WHERE F2.friendee = $1
+                AND F2.friender = F1.friendee
+          )
+    ) AS FriendsTable
+    ON FriendsTable.FriendEmail = U.email;
+`;
+
+
+  try {
+      const client = await pool.connect();
+
+      const result = await client.query(sql, [userEmail]);
+
+      client.release();
+
+      console.log(result.rows);
+      console.log(' ------END-------');
+      return res.status(200).json({ data: result.rows });
+  } catch (error) {
+      console.error("Error retrieving friends list:", error.stack);
+      return res.status(500).json({ message: "Server error, try again" });
+  }
+};
+
+
+const getPendingFriendRequests = async (req, res, next) => {
+  console.log('getPendingRequests hit -------------');
+  const userEmail = req.query.userEmail;
+  console.log(req.query.userEmail);
+
+  const sql = `
+    SELECT U.email, U.firstname, U.lastname, U.schoolid, U.role
+    FROM USERS AS U
+    JOIN (
+        SELECT friender AS FriendEmail 
+        FROM FRIENDS AS F1
+        WHERE F1.friendee = $1
+          AND NOT EXISTS (
+              SELECT 1 
+              FROM FRIENDS AS F2
+              WHERE F2.friender = $1
+                AND F2.friendee = F1.friender
+          )
+    ) AS FriendsTable
+    ON FriendsTable.FriendEmail = U.email;
+`;
+
+
+  try {
+      const client = await pool.connect();
+
+      const result = await client.query(sql, [userEmail]);
+
+      client.release();
+
+      console.log(result.rows);
+      console.log(' ------END Pending Requests-------');
+      return res.status(200).json({ data: result.rows });
+  } catch (error) {
+      console.error("Error retrieving friends list:", error.stack);
+      return res.status(500).json({ message: "Server error, try again" });
+  }
+};
+
+
+
 
 const getCategories = async (req, res, next) => {
   const client = await pool.connect();
@@ -1075,6 +1180,8 @@ export {
   friendUser,
   unfriendUser,
   getFriendsList,
+  getSentFriendRequests,
+  getPendingFriendRequests,
   getCategories,
   getTest
 };
