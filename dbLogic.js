@@ -74,6 +74,7 @@ const verifyUserLogin = async (req, res, next) => {
         U.firstname, 
         U.lastname, 
         U.password, 
+        U.color,
         S.schoolname AS schoolname, 
         U.role 
       FROM USERS AS U
@@ -104,6 +105,7 @@ const verifyUserLogin = async (req, res, next) => {
           LastName: user.lastname,
           SchoolName: user.schoolname, // Use schoolname instead of schoolid
           Role: user.role,
+          color: user.color,
         },
         token: token,
       });
@@ -259,103 +261,6 @@ const approveUser = (req, res, next) => {
   });
 };
 
-/*const updateUserInfo = async (req, res, next) => {
-  const client = await pool.connect();
-
-  try {
-    const { email, newEmail, firstname, lastname } = req.body;
-
-    console.log("Received request to update user info for email:", email);
-
-    // Validate email
-    if (!email) {
-      return res.status(400).json({ message: "Email is required." });
-    }
-
-    // Check if the new email is provided and trim
-    const trimmedEmail = email.trim();
-    const trimmedNewEmail = newEmail ? newEmail.trim() : null;
-
-    // Query to find the user
-    const checkUserQuery = "SELECT * FROM USERS WHERE email = $1";
-    const userResult = await client.query(checkUserQuery, [trimmedEmail]);
-
-    if (userResult.rows.length === 0) {
-      console.error("User not found for email:", email);
-      return res.status(404).json({ message: `User not found for email: ${email}` });
-    }
-
-    // Start a transaction
-    await client.query("BEGIN");
-
-    // Update user table
-    let updateQuery = "UPDATE USERS SET";
-    const updateValues = [];
-    let index = 1;
-
-    if (trimmedNewEmail) {
-      updateQuery += ` email = $${index},`;
-      updateValues.push(trimmedNewEmail);
-      index++;
-    }
-    if (firstname) {
-      updateQuery += ` firstname = $${index},`;
-      updateValues.push(firstname.trim());
-      index++;
-    }
-    if (lastname) {
-      updateQuery += ` lastname = $${index},`;
-      updateValues.push(lastname.trim());
-      index++;
-    }
-
-    updateQuery = updateQuery.slice(0, -1); // Remove trailing comma
-    updateQuery += ` WHERE LOWER(email) = LOWER($${index})`;
-    updateValues.push(trimmedEmail);
-
-    await client.query(updateQuery, updateValues);
-
-    console.log("User table updated successfully.");
-
-    // Update other tables where email is referenced
-    if (trimmedNewEmail) {
-      const tablesToUpdate = [
-        { table: "conversation_members", column: "email" },
-        { table: "community_members", column: "email" },
-        { table: "friends", columns: ["friender", "friendee"] },
-        { table: "message", column: "sender" },
-        { table: "post", column: "email" },
-        { table: "post_likes", column: "email" },
-      ];
-
-      for (const table of tablesToUpdate) {
-        if (Array.isArray(table.columns)) {
-          for (const column of table.columns) {
-            const updateTableQuery = `UPDATE ${table.table} SET ${column} = $1 WHERE ${column} = $2`;
-            await client.query(updateTableQuery, [trimmedNewEmail, trimmedEmail]);
-          }
-        } else {
-          const updateTableQuery = `UPDATE ${table.table} SET ${table.column} = $1 WHERE ${table.column} = $2`;
-          await client.query(updateTableQuery, [trimmedNewEmail, trimmedEmail]);
-        }
-      }
-
-      console.log("All referenced tables updated successfully.");
-    }
-
-    // Commit the transaction
-    await client.query("COMMIT");
-
-    return res.status(200).json({ message: "User information updated successfully." });
-  } catch (error) {
-    // Rollback the transaction in case of an error
-    await client.query("ROLLBACK");
-    console.error("Error updating user info:", error.stack);
-    return res.status(500).json({ message: "Server error." });
-  } finally {
-    client.release();
-  }
-};*/
 
 const updateUserInfo = async (req, res, next) => {
   const client = await pool.connect();
