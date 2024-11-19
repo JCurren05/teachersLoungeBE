@@ -44,7 +44,8 @@ import {
   getCategories,
   getTest,
   createNewCommunity,
-  getSentFriendRequests
+  getSentFriendRequests,
+  changeColor
 } from "./dbLogic.js";
 
 const router = express.Router();
@@ -59,6 +60,7 @@ router.post("/createNewUser", createNewUser);
 router.get("/getApprovedUsers", getApprovedUsers);
 router.get("/getPendingUsers", getPendingUsers);
 router.post("/approveUser", approveUser);
+router.post("/changeUserColor", changeColor);
 router.delete("/deleteUser", deleteUser);
 //router.get("/getSpecificUser", getSpecificUser); // Assuming this function will be implemented similarly to getApprovedUsers
 //router.post("/promoteUser", promoteUser);

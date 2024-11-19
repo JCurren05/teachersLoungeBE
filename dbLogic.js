@@ -33,7 +33,7 @@ const verifyUserLogin = async (req, res, next) => {
     if (results.rows.length > 0) {
       const user = results.rows[0];
       console.log(user);
-    
+
       const match = await bcrypt.compare(req.body.password, user.password);
 
       if (!match) {
@@ -49,6 +49,7 @@ const verifyUserLogin = async (req, res, next) => {
           LastName: user.lastname,
           SchoolID: user.schoolid,
           Role: user.role,
+          color: user.color
         },
         token: token,
       });
@@ -95,7 +96,7 @@ const registerNewUser = async (req, res, next) => {
     const token = generateToken(req.body.username);
 
     // Insert new user into the database
-    const insertUserQuery = 
+    const insertUserQuery =
       "INSERT INTO USERS (Email, FirstName, LastName, Password, SchoolID, Role) VALUES ($1, $2, $3, $4, $5, $6)";
     await pool.query(insertUserQuery, [
       req.body.username,
@@ -126,16 +127,16 @@ const registerNewUser = async (req, res, next) => {
 
 //Required fields in req.body: email, fname, lname, schoolId
 const createNewUser = async (req, res, next) => {
-  const sql = 
+  const sql =
     "INSERT INTO USERS (Email, FirstName, LastName, SchoolID) VALUES ($1, $2, $3, $4)";
 
   try {
     // Execute the query with pool.query
     const results = await pool.query(sql, [
-      req.body.email,    
-      req.body.fname,    
-      req.body.lname,    
-      req.body.schoolId  
+      req.body.email,
+      req.body.fname,
+      req.body.lname,
+      req.body.schoolId
     ]);
 
     // Send a success response with the query results
@@ -166,6 +167,26 @@ const promoteUser = (req, res, next) => {
     return res.status(200).json({ message: "Success" });
   });
 };
+
+const changeColor = async (req, res, next) => {
+  console.log("change color hit");
+  const sql =
+    `UPDATE USERS 
+    SET color = $1
+    WHERE USERS.email= $2`;
+  try {
+    const results = await pool.query(sql, [
+      req.body.color,
+      req.body.email
+    ]);
+    return res.status(200).json({ data: results });
+
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: error.stack });
+  }
+};
+
 
 const approveUser = (req, res, next) => {
   var sql =
@@ -299,10 +320,10 @@ const getApprovedUsers = (req, res, next) => {
   console.log('getApprovedUsers hit');
   pool.query(
     "select * from USERS where (USERS.Role= " +
-      connection.escape("Approved") +
-      ") OR (USERS.Role=" +
-      connection.escape("Admin") +
-      ")",
+    connection.escape("Approved") +
+    ") OR (USERS.Role=" +
+    connection.escape("Admin") +
+    ")",
     function (error, results) {
       if (error) {
         console.error(error.stack);
@@ -347,7 +368,7 @@ const approvePost = async (req, res, next) => {
 const deletePost = async (req, res, next) => {
   console.log('delete posts hit');
   console.log(req.body.id);
-  try{
+  try {
     // Delete likes associated with the post
     const deleteLikesSql = "DELETE FROM POST_LIKES WHERE postid = $1";
     await pool.query(deleteLikesSql, [req.body.id]);
@@ -530,26 +551,26 @@ const createNewCommunity = (req, res, next) => {
 }; */
 const createNewCommunity = (req, res, next) => {
   console.log('create new community hit');
-    const sql = "SELECT * FROM COMMUNITY WHERE communityname = $1";
-    console.log(req.body);
-    const values = [req.body.communityName];
+  const sql = "SELECT * FROM COMMUNITY WHERE communityname = $1";
+  console.log(req.body);
+  const values = [req.body.communityName];
 
-    pool.query(sql, values, (error, results) => {
+  pool.query(sql, values, (error, results) => {
+    if (error) {
+      return res.status(500).json({ message: "Server error, try again" });
+    }
+    if (results.rows.length === 0) {
+      const insertSql = "INSERT INTO COMMUNITY(communityname) VALUES ($1)";
+      pool.query(insertSql, values, (error, results) => {
         if (error) {
-            return res.status(500).json({ message: "Server error, try again" });
+          return res.status(500).json({ message: "Server error, try again" });
         }
-        if (results.rows.length === 0) {
-            const insertSql = "INSERT INTO COMMUNITY(communityname) VALUES ($1)";
-            pool.query(insertSql, values, (error, results) => {
-                if (error) {
-                    return res.status(500).json({ message: "Server error, try again" });
-                }
-                return res.status(201).json({ message: "Community created successfully" });
-            });
-        } else {
-            return res.status(500).json({ message: "Community already exists!" });
-        }
-    });
+        return res.status(201).json({ message: "Community created successfully" });
+      });
+    } else {
+      return res.status(500).json({ message: "Community already exists!" });
+    }
+  });
 };
 
 // Gets all communities
@@ -593,25 +614,25 @@ const joinCommunity = async (req, res, next) => {
 const leaveCommunity = (req, res, next) => {
   const { communityID, userEmail } = req.query;
   console.log(`Attempting to leave community: ${communityID}, User: ${userEmail}`);
-  
+
   const sql = `
       DELETE FROM COMMUNITY_MEMBERS
       WHERE CommunityID = $1
       AND Email = $2`;
 
   pool.query(sql, [communityID, userEmail], (error, results) => {
-      if (error) {
-          console.error('Error executing query:', error.stack);
-          return res.status(500).json({ message: "Server error, try again" });
-      }
-      
-      if (results.rowCount > 0) {
-          console.log('User removed successfully');
-          return res.status(200).json({ message: "User removed from community successfully" });
-      } else {
-          console.log('No rows affected');
-          return res.status(404).json({ message: "User not found in community" });
-      }
+    if (error) {
+      console.error('Error executing query:', error.stack);
+      return res.status(500).json({ message: "Server error, try again" });
+    }
+
+    if (results.rowCount > 0) {
+      console.log('User removed successfully');
+      return res.status(200).json({ message: "User removed from community successfully" });
+    } else {
+      console.log('No rows affected');
+      return res.status(404).json({ message: "User not found in community" });
+    }
   });
 };
 
@@ -1100,17 +1121,17 @@ const getFriendsList = async (req, res, next) => {
                ON FriendsTable.FriendEmail = U.email;`;
 
   try {
-      const client = await pool.connect();
+    const client = await pool.connect();
 
-      const result = await client.query(sql, [userEmail]);
+    const result = await client.query(sql, [userEmail]);
 
-      client.release();
+    client.release();
 
-      console.log(result.rows);
-      return res.status(200).json({ data: result.rows });
+    console.log(result.rows);
+    return res.status(200).json({ data: result.rows });
   } catch (error) {
-      console.error("Error retrieving friends list:", error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
+    console.error("Error retrieving friends list:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
   }
 };
 
@@ -1139,18 +1160,18 @@ const getSentFriendRequests = async (req, res, next) => {
 
 
   try {
-      const client = await pool.connect();
+    const client = await pool.connect();
 
-      const result = await client.query(sql, [userEmail]);
+    const result = await client.query(sql, [userEmail]);
 
-      client.release();
+    client.release();
 
-      console.log(result.rows);
-      console.log(' ------END-------');
-      return res.status(200).json({ data: result.rows });
+    console.log(result.rows);
+    console.log(' ------END-------');
+    return res.status(200).json({ data: result.rows });
   } catch (error) {
-      console.error("Error retrieving friends list:", error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
+    console.error("Error retrieving friends list:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
   }
 };
 
@@ -1179,18 +1200,18 @@ const getPendingFriendRequests = async (req, res, next) => {
 
 
   try {
-      const client = await pool.connect();
+    const client = await pool.connect();
 
-      const result = await client.query(sql, [userEmail]);
+    const result = await client.query(sql, [userEmail]);
 
-      client.release();
+    client.release();
 
-      console.log(result.rows);
-      console.log(' ------END Pending Requests-------');
-      return res.status(200).json({ data: result.rows });
+    console.log(result.rows);
+    console.log(' ------END Pending Requests-------');
+    return res.status(200).json({ data: result.rows });
   } catch (error) {
-      console.error("Error retrieving friends list:", error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
+    console.error("Error retrieving friends list:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
   }
 };
 
@@ -1275,5 +1296,6 @@ export {
   getSentFriendRequests,
   getPendingFriendRequests,
   getCategories,
-  getTest
+  getTest,
+  changeColor
 };
