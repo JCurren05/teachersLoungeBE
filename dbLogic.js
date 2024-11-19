@@ -344,12 +344,17 @@ const updateUserInfo = async (req, res, next) => {
 
     console.log("Received request to update user info for email:", email);
 
+    // Validate email
     if (!email) {
       return res.status(400).json({ message: "Email is required." });
     }
 
+    const trimmedEmail = email.trim();
+    const trimmedNewEmail = newEmail ? newEmail.trim() : null;
+
+    // Query to find the user
     const checkUserQuery = "SELECT * FROM USERS WHERE email = $1";
-    const userResult = await client.query(checkUserQuery, [email]);
+    const userResult = await client.query(checkUserQuery, [trimmedEmail]);
 
     if (userResult.rows.length === 0) {
       console.error("User not found for email:", email);
@@ -381,17 +386,18 @@ const updateUserInfo = async (req, res, next) => {
       }
 
       const updateSchoolQuery = "UPDATE USERS SET schoolid = $1 WHERE email = $2";
-      await client.query(updateSchoolQuery, [schoolId, email]);
+      await client.query(updateSchoolQuery, [schoolId, trimmedEmail]);
       console.log("User's school updated successfully.");
     }
 
+    // Update user table fields
     let updateQuery = "UPDATE USERS SET";
     const updateValues = [];
     let index = 1;
 
-    if (newEmail) {
+    if (trimmedNewEmail) {
       updateQuery += ` email = $${index},`;
-      updateValues.push(newEmail.trim());
+      updateValues.push(trimmedNewEmail);
       index++;
     }
     if (firstname) {
@@ -408,10 +414,36 @@ const updateUserInfo = async (req, res, next) => {
     if (updateValues.length > 0) {
       updateQuery = updateQuery.slice(0, -1); // Remove trailing comma
       updateQuery += ` WHERE email = $${index}`;
-      updateValues.push(email);
+      updateValues.push(trimmedEmail);
 
       await client.query(updateQuery, updateValues);
       console.log("User table updated successfully.");
+    }
+
+    // Update other tables where email is referenced
+    if (trimmedNewEmail) {
+      const tablesToUpdate = [
+        { table: "conversation_members", column: "email" },
+        { table: "community_members", column: "email" },
+        { table: "friends", columns: ["friender", "friendee"] },
+        { table: "message", column: "sender" },
+        { table: "post", column: "email" },
+        { table: "post_likes", column: "email" },
+      ];
+
+      for (const table of tablesToUpdate) {
+        if (Array.isArray(table.columns)) {
+          for (const column of table.columns) {
+            const updateTableQuery = `UPDATE ${table.table} SET ${column} = $1 WHERE ${column} = $2`;
+            await client.query(updateTableQuery, [trimmedNewEmail, trimmedEmail]);
+          }
+        } else {
+          const updateTableQuery = `UPDATE ${table.table} SET ${table.column} = $1 WHERE ${table.column} = $2`;
+          await client.query(updateTableQuery, [trimmedNewEmail, trimmedEmail]);
+        }
+      }
+
+      console.log("All referenced tables updated successfully.");
     }
 
     await client.query("COMMIT");
@@ -425,6 +457,7 @@ const updateUserInfo = async (req, res, next) => {
     client.release();
   }
 };
+
 
 
 
