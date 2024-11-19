@@ -23,7 +23,7 @@ const disconnectDB = (req, res, next) => {
 //Functions for logging in and registering
 
 // Logs in the user to the app
-const verifyUserLogin = async (req, res, next) => {
+/*const verifyUserLogin = async (req, res, next) => {
   const client = await pool.connect();
 
   try {
@@ -61,7 +61,62 @@ const verifyUserLogin = async (req, res, next) => {
   } finally {
     client.release();
   }
+};*/
+const verifyUserLogin = async (req, res, next) => {
+  const client = await pool.connect();
+
+  try {
+    // Updated SQL query to join USERS and SCHOOL tables
+    const sql = `
+      SELECT 
+        U.email, 
+        U.firstname, 
+        U.lastname, 
+        U.password, 
+        S.schoolname AS schoolname, 
+        U.role 
+      FROM USERS AS U
+      INNER JOIN SCHOOL AS S ON U.schoolid = S.schoolid
+      WHERE U.email = $1
+    `;
+    
+    const results = await client.query(sql, [req.body.username]);
+
+    if (results.rows.length > 0) {
+      const user = results.rows[0];
+      console.log(user);
+
+      // Verify password using bcrypt
+      const match = await bcrypt.compare(req.body.password, user.password);
+
+      if (!match) {
+        return res.status(400).json({ message: "Incorrect password" });
+      }
+
+      // Generate token and return response with schoolname
+      const token = generateToken(req.body.username);
+      return res.status(200).json({
+        message: "User logged in successfully",
+        user: {
+          Email: user.email,
+          FirstName: user.firstname,
+          LastName: user.lastname,
+          SchoolName: user.schoolname, // Use schoolname instead of schoolid
+          Role: user.role,
+        },
+        token: token,
+      });
+    } else {
+      return res.status(400).json({ message: "User doesn't exist" });
+    }
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error: " + error.stack });
+  } finally {
+    client.release();
+  }
 };
+
 
 // Registers a new user onto the app
 const registerNewUser = async (req, res, next) => {
@@ -183,7 +238,7 @@ const approveUser = (req, res, next) => {
   });
 };
 
-const updateUserInfo = async (req, res, next) => {
+/*const updateUserInfo = async (req, res, next) => {
   const client = await pool.connect();
 
   try {
@@ -279,7 +334,99 @@ const updateUserInfo = async (req, res, next) => {
   } finally {
     client.release();
   }
+};*/
+
+const updateUserInfo = async (req, res, next) => {
+  const client = await pool.connect();
+
+  try {
+    const { email, newEmail, firstname, lastname, schoolName } = req.body;
+
+    console.log("Received request to update user info for email:", email);
+
+    if (!email) {
+      return res.status(400).json({ message: "Email is required." });
+    }
+
+    const checkUserQuery = "SELECT * FROM USERS WHERE email = $1";
+    const userResult = await client.query(checkUserQuery, [email]);
+
+    if (userResult.rows.length === 0) {
+      console.error("User not found for email:", email);
+      return res.status(404).json({ message: `User not found for email: ${email}` });
+    }
+
+    await client.query("BEGIN");
+
+    // Handle school update logic
+    if (schoolName) {
+      const checkSchoolQuery = `
+        SELECT schoolid FROM SCHOOL WHERE LOWER(schoolname) = LOWER($1)
+      `;
+      const schoolResult = await client.query(checkSchoolQuery, [schoolName]);
+
+      let schoolId;
+      if (schoolResult.rows.length > 0) {
+        // School exists
+        schoolId = schoolResult.rows[0].schoolid;
+      } else {
+        // Create a new school entry with auto-generated schoolid
+        const insertSchoolQuery = `
+          INSERT INTO SCHOOL (schoolid, schoolname)
+          VALUES ((SELECT COALESCE(MAX(schoolid), 0) + 1 FROM SCHOOL), $1)
+          RETURNING schoolid
+        `;
+        const newSchoolResult = await client.query(insertSchoolQuery, [schoolName]);
+        schoolId = newSchoolResult.rows[0].schoolid;
+      }
+
+      const updateSchoolQuery = "UPDATE USERS SET schoolid = $1 WHERE email = $2";
+      await client.query(updateSchoolQuery, [schoolId, email]);
+      console.log("User's school updated successfully.");
+    }
+
+    let updateQuery = "UPDATE USERS SET";
+    const updateValues = [];
+    let index = 1;
+
+    if (newEmail) {
+      updateQuery += ` email = $${index},`;
+      updateValues.push(newEmail.trim());
+      index++;
+    }
+    if (firstname) {
+      updateQuery += ` firstname = $${index},`;
+      updateValues.push(firstname.trim());
+      index++;
+    }
+    if (lastname) {
+      updateQuery += ` lastname = $${index},`;
+      updateValues.push(lastname.trim());
+      index++;
+    }
+
+    if (updateValues.length > 0) {
+      updateQuery = updateQuery.slice(0, -1); // Remove trailing comma
+      updateQuery += ` WHERE email = $${index}`;
+      updateValues.push(email);
+
+      await client.query(updateQuery, updateValues);
+      console.log("User table updated successfully.");
+    }
+
+    await client.query("COMMIT");
+
+    return res.status(200).json({ message: "User information updated successfully." });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Error updating user info:", error.stack);
+    return res.status(500).json({ message: "Server error." });
+  } finally {
+    client.release();
+  }
 };
+
+
 
 
 
@@ -994,22 +1141,35 @@ const getUserInfo = async (req, res, next) => {
   console.log('getUserInfo hit');
   const userEmail = req.query.userEmail;
 
-  const sql = `SELECT U.email, U.firstname, U.lastname, U.schoolid, U.role 
-               FROM USERS AS U WHERE U.email = $1`;
+  // Updated SQL query with JOIN to include the schoolname
+  const sql = `
+    SELECT 
+      U.email, 
+      U.firstname, 
+      U.lastname, 
+      S.schoolname, 
+      U.role 
+    FROM USERS AS U
+    INNER JOIN SCHOOL AS S ON U.schoolid = S.schoolid
+    WHERE U.email = $1;
+  `;
 
   try {
     const client = await pool.connect();
 
+    // Execute the query
     const result = await client.query(sql, [userEmail]);
 
     client.release();
 
+    // Return the results
     return res.status(200).json({ data: result.rows });
   } catch (error) {
     console.error("Error executing user info query:", error.stack);
     return res.status(500).json({ message: "Server error, try again" });
   }
 };
+
 
 // Check if one user friended another, requires both ways to be friends
 const checkIfFriended = async (req, res, next) => {
