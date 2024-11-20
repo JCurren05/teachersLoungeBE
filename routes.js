@@ -23,6 +23,7 @@ import {
   leaveCommunity,
   getUserCommunities,
   searchUser,
+  findUser, 
   addComment,
   getComment,
   getCommentByCommentID,
@@ -86,6 +87,7 @@ router.get("/getUserCommunities", getUserCommunities);
 
 // User Search Routes
 router.get("/searchUser", searchUser);
+router.get("/findUser", findUser);
 
 // Comment Routes
 router.post("/addComment", addComment);

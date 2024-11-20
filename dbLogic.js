@@ -81,7 +81,7 @@ const verifyUserLogin = async (req, res, next) => {
       INNER JOIN SCHOOL AS S ON U.schoolid = S.schoolid
       WHERE U.email = $1
     `;
-    
+
     const results = await client.query(sql, [req.body.username]);
 
     if (results.rows.length > 0) {
@@ -505,7 +505,7 @@ const getUserPosts = async (req, res, next) => {
 const getAllApprovedPosts = async (req, res, next) => {
   console.log('getAllApprovedPosts hit')
   try {
-    const sql = "SELECT * FROM POST WHERE approved = $1";
+    const sql = "SELECT * FROM POST WHERE approved = $1 AND communityid IS NULL";
     const results = await pool.query(sql, [1]); // 1 for approved posts
 
     return res.status(200).json({ data: results.rows });
@@ -819,6 +819,30 @@ const searchUser = async (req, res, next) => {
   } else {
     return res.status(400).json({ message: "Search query cannot be empty" });
   }
+};
+
+const findUser = async (req, res, next) => {
+  console.log('findUser hit');
+
+console.log(req.query);
+  const sql = `SELECT * FROM USERS 
+                 WHERE email = $1`;
+
+  try {
+    const client = await pool.connect();
+
+    const result = await client.query(sql, [req.query.email]);
+
+    console.log(result.rows);
+
+    client.release();
+
+    return res.status(200).json({ data: result.rows });
+  } catch (error) {
+    console.error("Error executing search query:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
+
 };
 
 const addComment = (req, res, next) => {
@@ -1374,6 +1398,7 @@ export {
   getCommunityApprovedPosts,
   createNewCommunityPost,
   searchUser,
+  findUser,
   addComment,
   getComment,
   getCommentByCommentID,
