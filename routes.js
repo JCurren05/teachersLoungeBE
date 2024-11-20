@@ -5,6 +5,9 @@ import {
   getPendingPosts,
   getUserPosts,
   deletePost,
+  likePost,
+  getPostLikes,
+  checkLikedPost,
   createNewCommunityPost,
   getCommunityApprovedPosts,
   verifyUserLogin,
@@ -68,6 +71,11 @@ router.get("/getAllApprovedPosts", getAllApprovedPosts);
 router.get("/getPendingPosts", getPendingPosts);
 router.get("/getUserPosts", getUserPosts);
 router.delete("/deletePost", deletePost);
+
+// Liking Post Routes
+router.post("/likePost", likePost);
+router.post("/getPostLikes", getPostLikes);
+router.post("/checkLikedPost", checkLikedPost);
 
 // Community Post Routes
 router.post("/createNewCommunityPost", createNewCommunityPost);

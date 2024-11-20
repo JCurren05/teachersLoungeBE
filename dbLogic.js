@@ -321,7 +321,7 @@ const fileUpload = async (req, res, next) => {
     return res.status(500).json({ message: error.stack });
   }
 };
-//Database functionality with likes and comments has not been implemented yet but these functions are how we imagine that would happen...
+// Database functionality with likes and comments has not been implemented yet but these functions are how we imagine that would happen...
 // Create a new post
 const createNewPost = async (req, res, next) => {
   console.log('create new post hit');
@@ -351,11 +351,13 @@ const createNewPost = async (req, res, next) => {
 
 // Add a like to a post
 const likePost = async (req, res, next) => {
+  console.log('likePost hit')
+  
   const sql = "INSERT INTO POST_LIKES (PostID, Email) VALUES ($1, $2)";
   const values = [req.body.postId, req.body.userEmail];
 
   try {
-    await pool.query(sql, values);
+    const results = await pool.query(sql, values);
     return res.status(200).json({ message: "Successfully liked the post!" });
   } catch (error) {
     console.error(error.stack);
@@ -365,6 +367,8 @@ const likePost = async (req, res, next) => {
 
 // Get the number of likes for a post
 const getPostLikes = async (req, res, next) => {
+  console.log('getPostLikes hit')
+  
   const sql = "SELECT COUNT(*) as likeCount FROM POST_LIKES WHERE POSTID = $1";
   const values = [req.body.postID];
 
@@ -376,6 +380,26 @@ const getPostLikes = async (req, res, next) => {
     return res.status(500).json({ message: "Server error, try again" });
   }
 };
+
+// Check if user already liked the post
+const checkLikedPost = async (req, res, next) => {
+  console.log('checkLikedPost hit')
+
+  const sql = "SELECT EXISTS(SELECT 1 FROM POST_LIKES WHERE PostID=$1 AND Email=$2)";
+  const values = [req.body.postId, req.body.userEmail];
+
+  try {
+    const results = await pool.query(sql, values);
+    if (results.data === true) {
+      return res.status(201).json({ message: "You've already liked the post!"});
+    } else {
+      return res.status(200).json({ message: "Successfully liked the post!" });
+    }
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
+}
 
 // Get comments for a post
 const getPostComments = async (req, res, next) => {
@@ -1140,6 +1164,7 @@ export {
   getUserPosts,
   getPostComments,
   getPostLikes,
+  checkLikedPost,
   likePost,
   createNewUser,
   createNewPost,
