@@ -828,6 +828,30 @@ const searchUser = async (req, res, next) => {
   }
 };
 
+const findUser = async (req, res, next) => {
+  console.log('findUser hit');
+
+console.log(req.query);
+  const sql = `SELECT * FROM USERS 
+                 WHERE email = $1`;
+
+  try {
+    const client = await pool.connect();
+
+    const result = await client.query(sql, [req.query.email]);
+
+    console.log(result.rows);
+
+    client.release();
+
+    return res.status(200).json({ data: result.rows });
+  } catch (error) {
+    console.error("Error executing search query:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
+
+};
+
 const addComment = async (req, res, next) => {
   console.log('addComment hit');
 
@@ -1392,6 +1416,7 @@ export {
   getCommunityApprovedPosts,
   createNewCommunityPost,
   searchUser,
+  findUser,
   addComment,
   getComment,
   getCommentByCommentID,
