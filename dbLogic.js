@@ -23,7 +23,7 @@ const disconnectDB = (req, res, next) => {
 //Functions for logging in and registering
 
 // Logs in the user to the app
-const verifyUserLogin = async (req, res, next) => {
+/*const verifyUserLogin = async (req, res, next) => {
   const client = await pool.connect();
 
   try {
@@ -32,8 +32,9 @@ const verifyUserLogin = async (req, res, next) => {
 
     if (results.rows.length > 0) {
       const user = results.rows[0];
-      const match = true; // Replace this with actual password comparison logic
-      // const match = await bcrypt.compare(req.body.password, user.Password);
+      console.log(user);
+
+      const match = await bcrypt.compare(req.body.password, user.password);
 
       if (!match) {
         return res.status(400).json({ message: "Incorrect password" });
@@ -48,6 +49,63 @@ const verifyUserLogin = async (req, res, next) => {
           LastName: user.lastname,
           SchoolID: user.schoolid,
           Role: user.role,
+          color: user.color
+        },
+        token: token,
+      });
+    } else {
+      return res.status(400).json({ message: "User doesn't exist" });
+    }
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: "Server error: " + error.stack });
+  } finally {
+    client.release();
+  }
+};*/
+const verifyUserLogin = async (req, res, next) => {
+  const client = await pool.connect();
+
+  try {
+    // Updated SQL query to join USERS and SCHOOL tables
+    const sql = `
+      SELECT 
+        U.email, 
+        U.firstname, 
+        U.lastname, 
+        U.password, 
+        U.color,
+        S.schoolname AS schoolname, 
+        U.role 
+      FROM USERS AS U
+      INNER JOIN SCHOOL AS S ON U.schoolid = S.schoolid
+      WHERE U.email = $1
+    `;
+    
+    const results = await client.query(sql, [req.body.username]);
+
+    if (results.rows.length > 0) {
+      const user = results.rows[0];
+      console.log(user);
+
+      // Verify password using bcrypt
+      const match = await bcrypt.compare(req.body.password, user.password);
+
+      if (!match) {
+        return res.status(400).json({ message: "Incorrect password" });
+      }
+
+      // Generate token and return response with schoolname
+      const token = generateToken(req.body.username);
+      return res.status(200).json({
+        message: "User logged in successfully",
+        user: {
+          Email: user.email,
+          FirstName: user.firstname,
+          LastName: user.lastname,
+          SchoolName: user.schoolname, // Use schoolname instead of schoolid
+          Role: user.role,
+          color: user.color,
         },
         token: token,
       });
@@ -61,6 +119,7 @@ const verifyUserLogin = async (req, res, next) => {
     client.release();
   }
 };
+
 
 // Registers a new user onto the app
 const registerNewUser = async (req, res, next) => {
@@ -94,7 +153,7 @@ const registerNewUser = async (req, res, next) => {
     const token = generateToken(req.body.username);
 
     // Insert new user into the database
-    const insertUserQuery = 
+    const insertUserQuery =
       "INSERT INTO USERS (Email, FirstName, LastName, Password, SchoolID, Role) VALUES ($1, $2, $3, $4, $5, $6)";
     await pool.query(insertUserQuery, [
       req.body.username,
@@ -125,16 +184,16 @@ const registerNewUser = async (req, res, next) => {
 
 //Required fields in req.body: email, fname, lname, schoolId
 const createNewUser = async (req, res, next) => {
-  const sql = 
+  const sql =
     "INSERT INTO USERS (Email, FirstName, LastName, SchoolID) VALUES ($1, $2, $3, $4)";
 
   try {
     // Execute the query with pool.query
     const results = await pool.query(sql, [
-      req.body.email,    
-      req.body.fname,    
-      req.body.lname,    
-      req.body.schoolId  
+      req.body.email,
+      req.body.fname,
+      req.body.lname,
+      req.body.schoolId
     ]);
 
     // Send a success response with the query results
@@ -166,6 +225,26 @@ const promoteUser = (req, res, next) => {
   });
 };
 
+const changeColor = async (req, res, next) => {
+  console.log("change color hit");
+  const sql =
+    `UPDATE USERS 
+    SET color = $1
+    WHERE USERS.email= $2`;
+  try {
+    const results = await pool.query(sql, [
+      req.body.color,
+      req.body.email
+    ]);
+    return res.status(200).json({ data: results });
+
+  } catch (error) {
+    console.error(error.stack);
+    return res.status(500).json({ message: error.stack });
+  }
+};
+
+
 const approveUser = (req, res, next) => {
   var sql =
     "UPDATE USERS SET Role =" +
@@ -181,6 +260,134 @@ const approveUser = (req, res, next) => {
     return res.status(200).json({ message: "Success" });
   });
 };
+
+
+const updateUserInfo = async (req, res, next) => {
+  const client = await pool.connect();
+
+  try {
+    const { email, newEmail, firstname, lastname, schoolName } = req.body;
+
+    console.log("Received request to update user info for email:", email);
+
+    // Validate email
+    if (!email) {
+      return res.status(400).json({ message: "Email is required." });
+    }
+
+    const trimmedEmail = email.trim();
+    const trimmedNewEmail = newEmail ? newEmail.trim() : null;
+
+    // Query to find the user
+    const checkUserQuery = "SELECT * FROM USERS WHERE email = $1";
+    const userResult = await client.query(checkUserQuery, [trimmedEmail]);
+
+    if (userResult.rows.length === 0) {
+      console.error("User not found for email:", email);
+      return res.status(404).json({ message: `User not found for email: ${email}` });
+    }
+
+    await client.query("BEGIN");
+
+    // Handle school update logic
+    if (schoolName) {
+      const checkSchoolQuery = `
+        SELECT schoolid FROM SCHOOL WHERE LOWER(schoolname) = LOWER($1)
+      `;
+      const schoolResult = await client.query(checkSchoolQuery, [schoolName]);
+
+      let schoolId;
+      if (schoolResult.rows.length > 0) {
+        // School exists
+        schoolId = schoolResult.rows[0].schoolid;
+      } else {
+        // Create a new school entry with auto-generated schoolid
+        const insertSchoolQuery = `
+          INSERT INTO SCHOOL (schoolid, schoolname)
+          VALUES ((SELECT COALESCE(MAX(schoolid), 0) + 1 FROM SCHOOL), $1)
+          RETURNING schoolid
+        `;
+        const newSchoolResult = await client.query(insertSchoolQuery, [schoolName]);
+        schoolId = newSchoolResult.rows[0].schoolid;
+      }
+
+      const updateSchoolQuery = "UPDATE USERS SET schoolid = $1 WHERE email = $2";
+      await client.query(updateSchoolQuery, [schoolId, trimmedEmail]);
+      console.log("User's school updated successfully.");
+    }
+
+    // Update user table fields
+    let updateQuery = "UPDATE USERS SET";
+    const updateValues = [];
+    let index = 1;
+
+    if (trimmedNewEmail) {
+      updateQuery += ` email = $${index},`;
+      updateValues.push(trimmedNewEmail);
+      index++;
+    }
+    if (firstname) {
+      updateQuery += ` firstname = $${index},`;
+      updateValues.push(firstname.trim());
+      index++;
+    }
+    if (lastname) {
+      updateQuery += ` lastname = $${index},`;
+      updateValues.push(lastname.trim());
+      index++;
+    }
+
+    if (updateValues.length > 0) {
+      updateQuery = updateQuery.slice(0, -1); // Remove trailing comma
+      updateQuery += ` WHERE email = $${index}`;
+      updateValues.push(trimmedEmail);
+
+      await client.query(updateQuery, updateValues);
+      console.log("User table updated successfully.");
+    }
+
+    // Update other tables where email is referenced
+    if (trimmedNewEmail) {
+      const tablesToUpdate = [
+        { table: "conversation_members", column: "email" },
+        { table: "community_members", column: "email" },
+        { table: "friends", columns: ["friender", "friendee"] },
+        { table: "message", column: "sender" },
+        { table: "post", column: "email" },
+        { table: "post_likes", column: "email" },
+      ];
+
+      for (const table of tablesToUpdate) {
+        if (Array.isArray(table.columns)) {
+          for (const column of table.columns) {
+            const updateTableQuery = `UPDATE ${table.table} SET ${column} = $1 WHERE ${column} = $2`;
+            await client.query(updateTableQuery, [trimmedNewEmail, trimmedEmail]);
+          }
+        } else {
+          const updateTableQuery = `UPDATE ${table.table} SET ${table.column} = $1 WHERE ${table.column} = $2`;
+          await client.query(updateTableQuery, [trimmedNewEmail, trimmedEmail]);
+        }
+      }
+
+      console.log("All referenced tables updated successfully.");
+    }
+
+    await client.query("COMMIT");
+
+    return res.status(200).json({ message: "User information updated successfully." });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("Error updating user info:", error.stack);
+    return res.status(500).json({ message: "Server error." });
+  } finally {
+    client.release();
+  }
+};
+
+
+
+
+
 
 const deleteUser = (req, res, next) => {
   var sql =
@@ -198,10 +405,10 @@ const getApprovedUsers = (req, res, next) => {
   console.log('getApprovedUsers hit');
   pool.query(
     "select * from USERS where (USERS.Role= " +
-      connection.escape("Approved") +
-      ") OR (USERS.Role=" +
-      connection.escape("Admin") +
-      ")",
+    connection.escape("Approved") +
+    ") OR (USERS.Role=" +
+    connection.escape("Admin") +
+    ")",
     function (error, results) {
       if (error) {
         console.error(error.stack);
@@ -246,7 +453,7 @@ const approvePost = async (req, res, next) => {
 const deletePost = async (req, res, next) => {
   console.log('delete posts hit');
   console.log(req.body.id);
-  try{
+  try {
     // Delete likes associated with the post
     const deleteLikesSql = "DELETE FROM POST_LIKES WHERE postid = $1";
     await pool.query(deleteLikesSql, [req.body.id]);
@@ -326,18 +533,26 @@ const fileUpload = async (req, res, next) => {
 const createNewPost = async (req, res, next) => {
   console.log('create new post hit');
   console.log(req.body);
+
+  // Validate that communityid is provided if the post is for a community
+  if (req.body.isCommunityPost && !req.body.communityid) {
+    return res.status(400).json({ message: 'Community ID is required for community posts.' });
+  }
+
   const sql = `
-    INSERT INTO POST (content, email, categoryid, fileurl, filedisplayname, filetype, approved)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    INSERT INTO POST (content, email, categoryid, fileurl, filedisplayname, filetype, approved, communityid)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     RETURNING *`;
+
   const values = [
     req.body.content,
     req.body.email,
-    req.body.category,
-    req.body.filePath,
-    req.body.fileDisplayName,
-    req.body.fileType,
-    req.body.approved || 1 //to approve posts by default
+    req.body.categoryid,
+    req.body.fileurl,
+    req.body.filedisplayname,
+    req.body.filetype,
+    req.body.approved || 1, // Default to approved
+    req.body.communityid// Assign communityid if provided
   ];
 
   try {
@@ -429,26 +644,26 @@ const createNewCommunity = (req, res, next) => {
 }; */
 const createNewCommunity = (req, res, next) => {
   console.log('create new community hit');
-    const sql = "SELECT * FROM COMMUNITY WHERE communityname = $1";
-    console.log(req.body);
-    const values = [req.body.communityName];
+  const sql = "SELECT * FROM COMMUNITY WHERE communityname = $1";
+  console.log(req.body);
+  const values = [req.body.communityName];
 
-    pool.query(sql, values, (error, results) => {
+  pool.query(sql, values, (error, results) => {
+    if (error) {
+      return res.status(500).json({ message: "Server error, try again" });
+    }
+    if (results.rows.length === 0) {
+      const insertSql = "INSERT INTO COMMUNITY(communityname) VALUES ($1)";
+      pool.query(insertSql, values, (error, results) => {
         if (error) {
-            return res.status(500).json({ message: "Server error, try again" });
+          return res.status(500).json({ message: "Server error, try again" });
         }
-        if (results.rows.length === 0) {
-            const insertSql = "INSERT INTO COMMUNITY(communityname) VALUES ($1)";
-            pool.query(insertSql, values, (error, results) => {
-                if (error) {
-                    return res.status(500).json({ message: "Server error, try again" });
-                }
-                return res.status(201).json({ message: "Community created successfully" });
-            });
-        } else {
-            return res.status(500).json({ message: "Community already exists!" });
-        }
-    });
+        return res.status(201).json({ message: "Community created successfully" });
+      });
+    } else {
+      return res.status(500).json({ message: "Community already exists!" });
+    }
+  });
 };
 
 // Gets all communities
@@ -492,25 +707,25 @@ const joinCommunity = async (req, res, next) => {
 const leaveCommunity = (req, res, next) => {
   const { communityID, userEmail } = req.query;
   console.log(`Attempting to leave community: ${communityID}, User: ${userEmail}`);
-  
+
   const sql = `
       DELETE FROM COMMUNITY_MEMBERS
       WHERE CommunityID = $1
       AND Email = $2`;
 
   pool.query(sql, [communityID, userEmail], (error, results) => {
-      if (error) {
-          console.error('Error executing query:', error.stack);
-          return res.status(500).json({ message: "Server error, try again" });
-      }
-      
-      if (results.rowCount > 0) {
-          console.log('User removed successfully');
-          return res.status(200).json({ message: "User removed from community successfully" });
-      } else {
-          console.log('No rows affected');
-          return res.status(404).json({ message: "User not found in community" });
-      }
+    if (error) {
+      console.error('Error executing query:', error.stack);
+      return res.status(500).json({ message: "Server error, try again" });
+    }
+
+    if (results.rowCount > 0) {
+      console.log('User removed successfully');
+      return res.status(200).json({ message: "User removed from community successfully" });
+    } else {
+      console.log('No rows affected');
+      return res.status(404).json({ message: "User not found in community" });
+    }
   });
 };
 
@@ -531,36 +746,35 @@ const getUserCommunities = (req, res, next) => {
 };
 
 const getCommunityApprovedPosts = async (req, res, next) => {
-  console.log('getCommunityApprovedposts hit');
-  console.log(req.query);
-  const communityID = parseInt(req.query.communityID);
-  const categoryID = parseInt(req.query.category);
+  console.log('getCommunityApprovedPosts hit');
+  const { communityID, category } = req.query;
 
-  const sql = categoryID === 0
-    ? `SELECT P.*, COALESCE(COUNT(PL.postid), 0) AS likesCount
-       FROM POST P
-       LEFT JOIN POST_LIKES PL ON P.postid = PL.postid
-       WHERE P.communityid = $1
-       GROUP BY P.postid`
-    : `SELECT P.*, COALESCE(COUNT(PL.postid), 0) AS likesCount
-       FROM POST P
-       LEFT JOIN POST_LIKES PL ON P.postid = PL.postid
-       WHERE P.communityid = $1 AND P.categoryid = $2
-       GROUP BY P.postid`;
+  const sql = category === "0"
+    ? `
+      SELECT * 
+      FROM POST 
+      WHERE communityid = $1 AND approved = 1`
+    : `
+      SELECT * 
+      FROM POST 
+      WHERE communityid = $1 AND categoryid = $2 AND approved = 1`;
+
+  const values = category === "0" ? [communityID] : [communityID, category];
 
   try {
-    const values = categoryID === 0 ? [communityID] : [communityID, categoryID];
-    const results = await pool.query(sql, values);
-
-    return res.status(200).json({ data: results.rows });
+    const result = await pool.query(sql, values);
+    return res.status(200).json({ data: result.rows });
   } catch (error) {
-    console.error(error.stack);
-    return res.status(500).json({ message: error.stack });
+    console.error('Error fetching community posts:', error.stack);
+    return res.status(500).json({ message: error.message });
   }
 };
 
 
 const createNewCommunityPost = async (req, res, next) => {
+  console.log('createNewCommunityPost hit');
+  console.log(req.body);
+
   const sql = `
     INSERT INTO POST (content, email, categoryid, fileurl, filedisplayname, filetype, communityid)
     VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -568,19 +782,19 @@ const createNewCommunityPost = async (req, res, next) => {
   const values = [
     req.body.content,
     req.body.email,
-    req.body.categoryid,
-    req.body.fileurl,
-    req.body.filedisplayname,
-    req.body.filetype,
-    req.body.communityid,
+    req.body.category, // Ensure category is passed correctly
+    req.body.fileurl || null, // Handle optional file URL
+    req.body.filedisplayname || "None",
+    req.body.filetype || "None",
+    req.body.communityId // Ensure this is passed correctly
   ];
 
   try {
     const result = await pool.query(sql, values);
-    return res.status(200).json({ data: result.rows[0] });
+    return res.status(201).json({ data: result.rows[0] });
   } catch (error) {
-    console.error(error.stack);
-    return res.status(500).json({ message: error.stack });
+    console.error('Error creating community post:', error.stack);
+    return res.status(500).json({ message: 'Failed to create community post.', error: error.message });
   }
 };
 
@@ -614,124 +828,159 @@ const searchUser = async (req, res, next) => {
   }
 };
 
-const addComment = (req, res, next) => {
-  var sql =
-    "INSERT INTO COMMENT(Content,Email, Time) VALUES (" +
-    connection.escape(req.body.content) +
-    "," +
-    connection.escape(req.body.email) +
-    "," +
-    connection.escape(req.body.time) +
-    ")";
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: error.stack });
-    }
-    return res.status(200).json({ data: results });
-  });
+const findUser = async (req, res, next) => {
+  console.log('findUser hit');
+
+console.log(req.query);
+  const sql = `SELECT * FROM USERS 
+                 WHERE email = $1`;
+
+  try {
+    const client = await pool.connect();
+
+    const result = await client.query(sql, [req.query.email]);
+
+    console.log(result.rows);
+
+    client.release();
+
+    return res.status(200).json({ data: result.rows });
+  } catch (error) {
+    console.error("Error executing search query:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
+  }
+
 };
 
-const getComment = (req, res, next) => {
+const addComment = async (req, res, next) => {
+  console.log('addComment hit');
+
+  // SQL query to insert a new comment
+  const sql = `
+    INSERT INTO COMMENT (content, email, time)
+    VALUES ($1, $2, $3)
+    RETURNING *`;
+  const values = [
+    req.body.content,
+    req.body.email,
+    req.body.time,
+  ];
+
+  try {
+    // Execute the query using the pool
+    const result = await pool.query(sql, values);
+    return res.status(200).json({ data: result.rows[0] });
+  } catch (error) {
+    console.error('Error adding comment:', error.stack);
+    return res.status(500).json({ message: 'Failed to add comment', error: error.message });
+  }
+};
+
+const getComment = async (req, res, next) => {
   console.log('getComment hit');
-  var sql =
-    "SELECT * FROM COMMENT WHERE email =" +
-    connection.escape(req.body.email) +
-    " AND content=" +
-    connection.escape(req.body.content);
-  pool.query(sql, function (error, results, fields) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: error.stack });
-    }
-    return res.status(200).json({ data: results });
-  });
+  const sql = "SELECT * FROM COMMENT WHERE email = $1 AND content = $2";
+  const values = [req.body.email, req.body.content];
+
+  try {
+    const results = await pool.query(sql, values);
+    return res.status(200).json({ data: results.rows });
+  } catch (error) {
+    console.error('Error fetching comment:', error.stack);
+    return res.status(500).json({ message: 'Server error, try again' });
+  }
 };
 
-const getCommentByCommentID = (req, res, next) => {
-  console.log('getCommentbyCommentID hit');
-  var sql =
-    "SELECT * FROM COMMENT WHERE CommentId =" +
-    connection.escape(req.body.commentId);
-  pool.query(sql, function (error, results, fields) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: error.stack });
-    }
-    return res.status(200).json({ data: results });
-  });
+const getCommentByCommentID = async (req, res, next) => {
+  console.log('getCommentByCommentID hit');
+  const sql = "SELECT * FROM COMMENT WHERE CommentId = $1";
+  const values = [req.body.commentId];
+
+  try {
+    const results = await pool.query(sql, values);
+    return res.status(200).json({ data: results.rows });
+  } catch (error) {
+    console.error('Error fetching comment by ID:', error.stack);
+    return res.status(500).json({ message: 'Server error, try again' });
+  }
 };
 
-const addCommentToPost = (req, res, next) => {
-  var sql =
-    "INSERT INTO COMMENTS_TO_POST(Email, CommentId, PostId) VALUES (" +
-    connection.escape(req.body.email) +
-    "," +
-    connection.escape(req.body.commentId) +
-    "," +
-    connection.escape(req.body.postId) +
-    ")";
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: error.stack });
-    }
-    return res.status(200).json({ data: results });
-  });
+const addCommentToPost = async (req, res, next) => {
+  console.log('addCommentToPost hit');
+  const sql = `
+    INSERT INTO COMMENTS_TO_POST (Email, CommentId, PostId)
+    VALUES ($1, $2, $3)
+    RETURNING *`;
+  const values = [req.body.email, req.body.commentId, req.body.postId];
+
+  try {
+    const results = await pool.query(sql, values);
+    return res.status(200).json({ data: results.rows[0] });
+  } catch (error) {
+    console.error('Error adding comment to post:', error.stack);
+    return res.status(500).json({ message: 'Server error, try again' });
+  }
 };
 
 const getCommentsByPostID = async (req, res, next) => {
   console.log('getCommentsByPostID hit');
 
-  // Parse postId from the request query and ensure it's a valid number
   const postId = Number(req.query.postId);
 
-  // Check if postId is valid
   if (isNaN(postId)) {
     return res.status(400).json({ message: 'Invalid postId' });
   }
 
-  const sql = 'SELECT * FROM COMMENTS_TO_POST WHERE PostID = $1';
-
-  const client = await pool.connect();
+  const sql = `
+    SELECT 
+        c.content,
+        c.email,
+        c."time",
+        ctp.postid
+    FROM 
+        comments_to_post AS ctp
+    JOIN 
+        comment AS c
+    ON 
+        ctp.commentid = c.commentid
+    WHERE 
+        ctp.postid = $1;
+  `;
 
   try {
-    const results = await client.query(sql, [postId]);
+    const results = await pool.query(sql, [postId]);
     return res.status(200).json({ data: results.rows });
   } catch (error) {
-    console.error(error.stack);
-    return res.status(500).json({ message: error.stack });
-  } finally {
-    client.release();
+    console.error('Error fetching comments by post ID:', error.stack);
+    return res.status(500).json({ message: 'Server error, try again' });
   }
 };
 
-const updateComment = (req, res, next) => {
-  var sql =
-    "UPDATE COMMENT SET Content=" +
-    connection.escape(req.body.content) +
-    " WHERE CommentID=" +
-    connection.escape(req.body.commentId);
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
-    return res.status(200).json({ message: "Comment updated successfully" });
-  });
+const updateComment = async (req, res, next) => {
+  console.log('updateComment hit');
+  const sql = "UPDATE COMMENT SET Content = $1 WHERE CommentID = $2";
+  const values = [req.body.content, req.body.commentId];
+
+  try {
+    await pool.query(sql, values);
+    return res.status(200).json({ message: 'Comment updated successfully' });
+  } catch (error) {
+    console.error('Error updating comment:', error.stack);
+    return res.status(500).json({ message: 'Server error, try again' });
+  }
 };
 
-const deleteComment = (req, res, next) => {
-  var sql =
-    "DELETE FROM COMMENT WHERE CommentID=" +
-    connection.escape(req.body.commentId);
-  pool.query(sql, function (error, results) {
-    if (error) {
-      console.error(error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
-    }
-    return res.status(200).json({ message: "Comment deleted successfully" });
-  });
+const deleteComment = async (req, res, next) => {
+  console.log('deleteComment hit');
+  const sql = "DELETE FROM COMMENT WHERE CommentID = $1";
+  const values = [req.body.commentId];
+
+  try {
+    await pool.query(sql, values);
+    return res.status(200).json({ message: 'Comment deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting comment:', error.stack);
+    return res.status(500).json({ message: 'Server error, try again' });
+  }
 };
 
 // Creates a new conversation
@@ -893,22 +1142,35 @@ const getUserInfo = async (req, res, next) => {
   console.log('getUserInfo hit');
   const userEmail = req.query.userEmail;
 
-  const sql = `SELECT U.email, U.firstname, U.lastname, U.schoolid, U.role 
-               FROM USERS AS U WHERE U.email = $1`;
+  // Updated SQL query with JOIN to include the schoolname
+  const sql = `
+    SELECT 
+      U.email, 
+      U.firstname, 
+      U.lastname, 
+      S.schoolname, 
+      U.role 
+    FROM USERS AS U
+    INNER JOIN SCHOOL AS S ON U.schoolid = S.schoolid
+    WHERE U.email = $1;
+  `;
 
   try {
     const client = await pool.connect();
 
+    // Execute the query
     const result = await client.query(sql, [userEmail]);
 
     client.release();
 
+    // Return the results
     return res.status(200).json({ data: result.rows });
   } catch (error) {
     console.error("Error executing user info query:", error.stack);
     return res.status(500).json({ message: "Server error, try again" });
   }
 };
+
 
 // Check if one user friended another, requires both ways to be friends
 const checkIfFriended = async (req, res, next) => {
@@ -999,17 +1261,17 @@ const getFriendsList = async (req, res, next) => {
                ON FriendsTable.FriendEmail = U.email;`;
 
   try {
-      const client = await pool.connect();
+    const client = await pool.connect();
 
-      const result = await client.query(sql, [userEmail]);
+    const result = await client.query(sql, [userEmail]);
 
-      client.release();
+    client.release();
 
-      console.log(result.rows);
-      return res.status(200).json({ data: result.rows });
+    console.log(result.rows);
+    return res.status(200).json({ data: result.rows });
   } catch (error) {
-      console.error("Error retrieving friends list:", error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
+    console.error("Error retrieving friends list:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
   }
 };
 
@@ -1038,18 +1300,18 @@ const getSentFriendRequests = async (req, res, next) => {
 
 
   try {
-      const client = await pool.connect();
+    const client = await pool.connect();
 
-      const result = await client.query(sql, [userEmail]);
+    const result = await client.query(sql, [userEmail]);
 
-      client.release();
+    client.release();
 
-      console.log(result.rows);
-      console.log(' ------END-------');
-      return res.status(200).json({ data: result.rows });
+    console.log(result.rows);
+    console.log(' ------END-------');
+    return res.status(200).json({ data: result.rows });
   } catch (error) {
-      console.error("Error retrieving friends list:", error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
+    console.error("Error retrieving friends list:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
   }
 };
 
@@ -1078,18 +1340,18 @@ const getPendingFriendRequests = async (req, res, next) => {
 
 
   try {
-      const client = await pool.connect();
+    const client = await pool.connect();
 
-      const result = await client.query(sql, [userEmail]);
+    const result = await client.query(sql, [userEmail]);
 
-      client.release();
+    client.release();
 
-      console.log(result.rows);
-      console.log(' ------END Pending Requests-------');
-      return res.status(200).json({ data: result.rows });
+    console.log(result.rows);
+    console.log(' ------END Pending Requests-------');
+    return res.status(200).json({ data: result.rows });
   } catch (error) {
-      console.error("Error retrieving friends list:", error.stack);
-      return res.status(500).json({ message: "Server error, try again" });
+    console.error("Error retrieving friends list:", error.stack);
+    return res.status(500).json({ message: "Server error, try again" });
   }
 };
 
@@ -1130,6 +1392,7 @@ export {
   deletePost,
   deleteUser,
   approveUser,
+  updateUserInfo,
   connectDB,
   disconnectDB,
   getApprovedUsers,
@@ -1153,6 +1416,7 @@ export {
   getCommunityApprovedPosts,
   createNewCommunityPost,
   searchUser,
+  findUser,
   addComment,
   getComment,
   getCommentByCommentID,
@@ -1173,5 +1437,6 @@ export {
   getSentFriendRequests,
   getPendingFriendRequests,
   getCategories,
-  getTest
+  getTest,
+  changeColor
 };

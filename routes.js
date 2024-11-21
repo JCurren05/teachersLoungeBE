@@ -17,11 +17,13 @@ import {
   fileUpload,
   //getSpecificUser,
   //promoteUser,
+  updateUserInfo,
   getAllCommunities,
   joinCommunity,
   leaveCommunity,
   getUserCommunities,
   searchUser,
+  findUser, 
   addComment,
   getComment,
   getCommentByCommentID,
@@ -43,7 +45,8 @@ import {
   getCategories,
   getTest,
   createNewCommunity,
-  getSentFriendRequests
+  getSentFriendRequests,
+  changeColor
 } from "./dbLogic.js";
 
 const router = express.Router();
@@ -51,12 +54,14 @@ const router = express.Router();
 // Authentication Routes
 router.post("/login", verifyUserLogin);
 router.post("/register", registerNewUser);
+router.patch("/updateUserInfo", updateUserInfo);
 
 // User Management Routes
 router.post("/createNewUser", createNewUser);
 router.get("/getApprovedUsers", getApprovedUsers);
 router.get("/getPendingUsers", getPendingUsers);
 router.post("/approveUser", approveUser);
+router.post("/changeUserColor", changeColor);
 router.delete("/deleteUser", deleteUser);
 //router.get("/getSpecificUser", getSpecificUser); // Assuming this function will be implemented similarly to getApprovedUsers
 //router.post("/promoteUser", promoteUser);
@@ -82,6 +87,7 @@ router.get("/getUserCommunities", getUserCommunities);
 
 // User Search Routes
 router.get("/searchUser", searchUser);
+router.get("/findUser", findUser);
 
 // Comment Routes
 router.post("/addComment", addComment);
