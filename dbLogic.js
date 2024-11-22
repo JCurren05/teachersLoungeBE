@@ -383,7 +383,7 @@ const getPostLikes = async (req, res, next) => {
 
 // Check if user already liked the post
 const checkLikedPost = async (req, res, next) => {
-  console.log('checkLikedPost hit')
+  console.log('checkLikedPost hit') // not hitting
 
   const sql = "SELECT EXISTS(SELECT 1 FROM POST_LIKES WHERE PostID=$1 AND Email=$2)";
   const values = [req.body.postId, req.body.userEmail];
@@ -399,7 +399,7 @@ const checkLikedPost = async (req, res, next) => {
     console.error(error.stack);
     return res.status(500).json({ message: "Server error, try again" });
   }
-}
+};
 
 // Get comments for a post
 const getPostComments = async (req, res, next) => {
